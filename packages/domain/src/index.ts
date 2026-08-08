@@ -14,12 +14,30 @@ export interface GridSignal {
   receivedAt: string; // ISO
 }
 
+export interface MpptState {
+  id: string;
+  powerKw: number;
+  /** Victron charge state code if available. */
+  state?: number;
+}
+
+export interface WallboxState {
+  id: string;
+  powerKw: number;
+  maxKw: number;
+  connected: boolean;
+  charging: boolean;
+}
+
 export interface PlantState {
+  /** Aggregated PV from all MPPTs (+ optional AC-PV). */
   pvKw: number;
+  mppt?: MpptState[];
   houseLoadKw: number;
   batterySocPercent: number;
   batteryPowerKw: number; // +charge / -discharge convention for EMS
   gridPowerKw: number; // +import / -export
+  wallbox?: WallboxState;
 }
 
 export interface UserComfortWish {

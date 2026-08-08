@@ -78,14 +78,17 @@ Intelligentes Messsystem (Smart Meter + Gateway) ist die vorgesehene Basis für 
 
 ## 3. Physische Umsetzung
 
+**Referenzanlage MultiPlus + MPPT + Wallbox:** detaillierte Topologie, MQTT-Größen, Steuerlogik und Meilensteine in [`docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md`](./docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md).
+
 ### 3.1 Kernkomponenten Victron-ESS
 
-1. **Wechselrichter/Ladegerät** MultiPlus-II oder Quattro (1- oder 3-phasig), ESS-Assistent konfiguriert.
-2. **GX-Gerät** (Cerbo GX / Venus OS auf geeigneter Hardware) – zentrale Daten- und Steuerschnittstelle.
-3. **Batterie** (z. B. Victron / kompatibel mit BMS-CAN).
-4. **PV**: MPPT (DC) und/oder AC-PV am AC-Out/AC-In je Konzept.
-5. **Netz-Zähler** am Victron (ET112, EM24, oder Compatible Meter) für korrekte ESS-Regelung.
-6. **Verkabelung**: VE.Bus, VE.Direct, VE.Can nach Hersteller; Erdung, FI, Absicherung nach Anlage.
+1. **Wechselrichter/Ladegerät** MultiPlus-II (1- oder 3-phasig), ESS-Assistent konfiguriert.
+2. **GX-Gerät** (Cerbo GX / Venus OS) – MQTT/Modbus-Zentrale.
+3. **Batterie** (Victron / kompatibel mit BMS-CAN), DVCC nach Hersteller.
+4. **PV**: ein oder mehrere **MPPT** (VE.Direct/VE.Can) auf den Batterie-Bus; optional zusätzlich AC-PV.
+5. **Netz-Zähler** (ET112, EM24, Compatible) als Grid-Meter für ESS.
+6. **Wallbox** als SteuVE (Victron EVCS am GX oder Drittanbieter per Modbus/API).
+7. **Verkabelung**: VE.Bus, VE.Direct, VE.Can; Erdung, FI, Absicherung nach Anlage.
 
 ### 3.2 §14a-Verdrahtung (kurzfristig machbar)
 
@@ -442,10 +445,10 @@ Erledigt (Sprint 1 – siehe `docs/IMPLEMENTATION.md`):
 2. `apps/controller` Control-Loop, `apps/api` mit RBAC
 3. `docs/vnb-checkliste.md`, Unit-Tests für Ceiling/RBAC
 
-Als Nächstes:
+Als Nächstes (Anlage MultiPlus + MPPT + Wallbox):
 
-1. Echter Venus-MQTT-Client (Topics lesen/schreiben, ACL-Doku)
-2. `apps/collector` + Persistenz/Audit-Store
-3. Watchdog / Docker-Compose
-4. Endkunden-Status-UI (read-only Grid)
-5. Wallbox-Adapter unter ActuatorGuard
+1. Venus-MQTT: MPPT/`solarcharger`, Multi/`vebus`, AUX→GridSignal
+2. `packages/wallbox` + Surplus-Laden mit Hysterese
+3. `apps/collector` + Persistenz/Audit-Store
+4. Status-UI (PV/MPPT, Wallbox, Ceiling read-only)
+5. Watchdog / Docker-Compose + VNB-Abnahme

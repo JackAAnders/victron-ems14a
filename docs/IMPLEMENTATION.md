@@ -55,6 +55,12 @@ I4  AUX/Grid-Signal setzt Ceiling auch wenn API offline
 I5  Bypass-Versuch erzeugt TamperAudit-Event
 ```
 
+## Anlagenfokus
+
+Primäre Hardware-Zielkonfiguration: **MultiPlus + MPPT + Wallbox** – siehe [`ANLAGE-MULTIPLUS-MPPT-WALLBOX.md`](./ANLAGE-MULTIPLUS-MPPT-WALLBOX.md).
+
+Kurz: MPPT nur lesen/aggregieren; Multi liefert ESS + AUX-§14a; EMS schreibt vor allem die **Wallbox**, Ceiling gilt für netzwirksamen SteuVE-Bezug.
+
 ## Umsetzungsreihenfolge
 
 ### Sprint 1 – Policy-Kern (jetzt im Repo)
@@ -66,26 +72,33 @@ I5  Bypass-Versuch erzeugt TamperAudit-Event
 - [x] API-Stub mit Status + Comfort-Endpoint (`apps/api`)
 - [x] Control-Loop + InMemory-Victron (`apps/controller`)
 
-### Sprint 2 – Victron-Anbindung
+### Sprint 2 – Victron MultiPlus + MPPT lesen
 
-- Venus MQTT lokal lesen (Leistung, SoC, digital inputs)
-- Write nur über Service-Account / ACL
-- `collector` publiziert normalisierten `PlantState`
-- Controller gegen Live-Fixture auf der Anlage
+- Venus MQTT: `solarcharger` (MPPT), `vebus` (Multi), `system`/`battery`, `grid`, `digitalinput`
+- PV aggregieren; AUX → `GridSignal`
+- Write nur Service-Account / ACL
+- `collector` publiziert `PlantState` inkl. `mppt[]`
+- Fixtures von echter Anlage
 
-### Sprint 3 – API & Endkunden-UI
+### Sprint 3 – Wallbox-Adapter
 
-- Login: Installateur vs. Endkunde (zunächst Basic/JWT lokal)
-- Status-Dashboard (Ceiling, Ursache, Geräte)
-- Comfort: Priorität WP/Wallbox, Zielladung – immer geclampt
-- Kein UI-Control für §14a-Disable
+- `packages/wallbox`: Interface + Victron EVCS und/oder Drittanbieter
+- Surplus-Laden (MPPT − Hauslast) mit Hysterese / Min. 6 A
+- Unter §14a: `ActuatorGuard` auf Wallbox + Multi-Netzladung
+- ESS vorerst Mode 1; kein Pflicht-Umstieg auf Mode 2/3
 
-### Sprint 4 – Betrieb & Abnahme
+### Sprint 4 – API & Endkunden-UI
 
-- Audit-Persistenz (SQLite/Postgres)
-- Watchdog / systemd oder Docker healthcheck
-- `docs/vnb-abnahme.md`: Steuerfall + Nachweis „Kunde kann nicht erhöhen“
-- Physische Checkliste: plombierter AUX-Pfad
+- Login: Installateur vs. Endkunde
+- Status: PV je MPPT, SoC, Grid, Wallbox, Ceiling (Grid read-only)
+- Comfort: Wallbox-Wunsch / Priorität – immer geclampt
+- Kein UI „§14a aus“
+
+### Sprint 5 – Betrieb & Abnahme
+
+- Audit-Persistenz, Watchdog/Docker
+- VNB-Checkliste + Nachweis Manipulationsschutz
+- Optional später: ESS Mode 2/3 für feinere Multi-Setpoints
 
 ## Physische Umsetzung (parallel zur Software)
 

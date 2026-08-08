@@ -5,7 +5,9 @@ Energiemanagementsystem für Victron-ESS mit manipulationssicherer §14a-Steueru
 ## Dokumente
 
 - **[PLAN.md](./PLAN.md)** – Anforderungen, Rechtslage, Physik, Endanwenderschutz
-- **[docs/IMPLEMENTATION.md](./docs/IMPLEMENTATION.md)** – konkrete technische Umsetzung
+- **[docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md](./docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md)** – Anlagenplan MultiPlus + MPPT + Wallbox
+- **[docs/IMPLEMENTATION.md](./docs/IMPLEMENTATION.md)** – technische Umsetzung / Sprints
+- **[docs/vnb-checkliste.md](./docs/vnb-checkliste.md)** – VNB-/Abnahme-Checkliste
 
 ## Prinzip
 
