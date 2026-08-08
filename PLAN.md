@@ -71,6 +71,7 @@ Intelligentes Messsystem (Smart Meter + Gateway) ist die vorgesehene Basis für 
 - **Anmeldung** SteuVE / Speicher / Wallbox beim VNB und ggf. Marktstammdatenregister.
 - **Elektrofachkraft** für Netzanschluss, Zählerplatz, Steuerleitungen, Potentialtrennung.
 - **IT-Sicherheit:** EMS nicht ungeschützt aus dem Internet; keine offenen MQTT-Ports; VRM nur über sichere Kanäle.
+- **Manipulationsschutz:** Endkunde darf die netzwirksame §14a-Steuerung nicht deaktivieren oder parametrisch aushebeln (VNB-/Abnahme-Anforderung) → plombierter Signalweg + softwareseitige Sperre (siehe Abschnitt 8).
 - **Haftung / Betrieb:** Falsche Steuerlogik kann Netzentgelt-Vorteile gefährden oder Netzvorgaben verletzen → Steuerbefehle loggen, Fail-safe (bei Signalverlust: konservativ dimmen).
 
 ---
@@ -211,14 +212,14 @@ Ohne EEBus-Zertifizierung und ohne vollständige VNB-Digitalsteuerung sind berei
 ### Phase 0 – Bestand und VNB
 
 1. Anlageninventar: Victron-Typen, Firmware, 1P/3P, Batterie-kWh, PV-kWp, vorhandene SteuVE.
-2. Klärung mit VNB: welche SteuVE melden, welches Netzentgelt-Modul, ob Steuerbox/Relais oder schon IP, Fristen iMSys.
+2. Klärung mit VNB: welche SteuVE melden, welches Netzentgelt-Modul, ob Steuerbox/Relais oder schon IP, Fristen iMSys, **Anforderungen an Manipulationsschutz / fehlende Endkunden-Modifikation**.
 3. Victron-Doku zur aktuellen §14a-/ESS-Herstellererklärung beschaffen; Firmware-Stand prüfen.
 
 ### Phase 1 – Physik & Sicherheit
 
 1. ESS korrekt in Betrieb (Grid-Meter, ESS-Assistent, Insel-/Backup-Konzept falls nötig).
-2. §14a-Verdrahtung AUX durch Elektrofachkraft; Abnahme/Testprotokoll.
-3. LAN-Segment, feste IPs, Firewall; MQTT nur lokal.
+2. §14a-Verdrahtung AUX durch Elektrofachkraft; Abnahme/Testprotokoll; Signalweg für Endkunden nicht bedienbar/überbrückbar.
+3. LAN-Segment, feste IPs, Firewall; MQTT nur lokal; getrennte Zugänge Installateur vs. Endkunde.
 
 ### Phase 2 – Datenpfad (Node.js)
 
@@ -251,17 +252,17 @@ Ohne EEBus-Zertifizierung und ohne vollständige VNB-Digitalsteuerung sind berei
 ## 7. Minimaler Node.js-Schnitt (Skizze)
 
 ```js
-// Pseudocode: Steuerbefehl → Victron + Wallbox
-async function applyGridConstraint(signal, state, actuators) {
-  const budgetKw = signal.maxSteuveGridKw; // z. B. 4.2 im Limit-Fall
+// Pseudocode: Netz-Ceiling ist verbindlich; User-Wunsch nur darunter
+async function applyGridConstraint(signal, userWish, state, actuators) {
+  const gridCeilingKw = signal.maxSteuveGridKw; // nur aus VNB/AUX/EEBus – nie aus User-Config
   const pvSurplusKw = Math.max(0, state.pvKw - state.houseLoadKw);
-  const allowedFromGrid = budgetKw; // vereinfacht; Gleichzeitigkeit später
-  const wallboxKw = Math.min(actuators.wallbox.maxKw, allowedFromGrid + pvSurplusKw);
-  const batteryGridChargeKw = Math.max(0, allowedFromGrid - wallboxKw);
+  const wishWallboxKw = userWish.wallboxKw ?? actuators.wallbox.maxKw;
+  const wallboxKw = Math.min(wishWallboxKw, gridCeilingKw + pvSurplusKw, actuators.wallbox.maxKw);
+  const batteryGridChargeKw = Math.max(0, gridCeilingKw - Math.min(wallboxKw, gridCeilingKw));
 
   await actuators.wallbox.setChargeKw(wallboxKw);
   await actuators.victron.setGridChargeLimitKw(batteryGridChargeKw);
-  await audit.log({ signal, wallboxKw, batteryGridChargeKw });
+  await audit.log({ signal, gridCeilingKw, wallboxKw, batteryGridChargeKw, userWish });
 }
 ```
 
@@ -269,114 +270,135 @@ Produktiv: Typen, Unit-Tests für Grenzfälle (0 PV, voller Speicher, 3-Phasen-U
 
 ---
 
-## 8. Endanwenderschutz
+## 8. Endanwenderschutz und manipulationssichere Netzsteuerung
 
-„Endanwenderschutz“ meint hier den Schutz von Komfort, Sicherheit, Daten und wirtschaftlicher Position des Anlagenbetreibers – nicht den Ersatz für Normen der Elektrofachplanung.
+VNBs fordern typischerweise, dass die **netzwirksame Steuerung nach §14a vom Endkunden nicht außer Kraft gesetzt, umgangen oder nachträglich verändert** werden kann. Endanwenderschutz heißt deshalb nicht „Kunde kann alles steuern“, sondern: Komfort und Transparenz **innerhalb** eines für den Kunden **gesperrten** Netzsteuerpfads.
 
-### 8.1 Was geschützt werden muss
+### 8.1 Zwei getrennte Ebenen
 
-| Schutzgut | Risiko ohne Schutz | EMS-Antwort |
-|-----------|-------------------|-------------|
-| Wohnkomfort / Wärme | WP dauerhaft zu stark gedimmt | Prioritäten, Mindestleistung, Zeitbudgets |
-| Mobilität | Auto morgens leer | Lade-Garantiefenster, Priorität vor Speicher-Netzladung |
-| Versorgungssicherheit | EMS-Crash lässt Anlage in falschem Limit | Watchdog, Fail-safe, Hardware-Fallback (AUX/Victron) |
-| Netzkonformität | Falsches Nicht-Dimmen → Ärger mit VNB / Modulverlust | verbindliche §14a-Einhaltung vor Komfort-Optimierung |
-| Vermögen / Tarife | unnötiger Netzbezug, falsche Entladung | erklärbare Regeln, Simulation, Opt-in für aggressive Strategien |
-| Privatsphäre | Cloud leakt Verbrauchsprofile | Local-first, minimale Cloud, Zweckbindung |
-| Manipulation | offenes MQTT / Remote-Write | Auth, Netzsegmentierung, keine Portfreigabe |
-| Nachvollziehbarkeit | „Warum lädt nichts?“ | UI + Audit: Ursache in Klartext |
+| Ebene | Wer darf ändern | Inhalt |
+|-------|-----------------|--------|
+| **A – GridControl (gesperrt)** | nur VNB-Signal / MSB-Steuerbox / Installateur mit Fachzugang | Limit, Sperre, Sollwert vom Netz; Mapping AUX/EEBus → maximale SteuVE-Bezugsleistung |
+| **B – UserComfort (erlaubt)** | Endkunde | Prioritäten *innerhalb* des Budgets (z. B. WP vor Wallbox), Zeitwünsche, Tarif-Opt-in, Anzeige |
 
-### 8.2 Schutzprinzipien (verbindlich für die Implementierung)
+Alles aus Ebene A ist für die Endkunden-UI **read-only**. Es gibt keinen Schalter „§14a aus“, keinen manuellen AC-In-Limit-Bypass und keinen Modus, der Netzlimits ignoriert.
 
-1. **Gesetz vor Komfort vor Optimierung**  
-   Ein aktiver §14a-/Netzbefehl hat Vorrang. Innerhalb des erlaubten Budgets maximiert das EMS Komfort (WP → Wallbox-Deadline → Speicher-Netzladung).
+### 8.2 Was geschützt werden muss
 
-2. **Mindestversorgung statt hartem Aus**  
-   Dimmen auf die jeweils zulässige **Mindestbezugsleistung** (nicht willkürlich auf 0), sofern der Steuerbefehl und die Geräteklasse das hergeben. Nicht-SteuVE (Herd, Licht) bleiben unberührt – EMS darf sie nicht „mitabwürgen“.
+| Schutzgut | Risiko ohne Schutz | Antwort |
+|-----------|-------------------|---------|
+| Netzkonformität / VNB-Vorgabe | Kunde deaktiviert Dimmen → Steuerbarkeit nicht gegeben | manipulationssicherer Steuerpfad (Hard- + Software) |
+| Wohnkomfort / Wärme | WP zu stark gedimmt | Prioritäten **innerhalb** des erlaubten Budgets |
+| Mobilität | Auto morgens leer | Ladewünsche nur soweit Budget und GridControl es zulassen |
+| Versorgungssicherheit | EMS-Crash | AUX/Victron-Fallback unabhängig vom EMS |
+| Manipulation / Sabotage | offenes MQTT, Victron-Passwort bekannt, AUX überbrückt | Rollen, Siegel, gesperrte Writes, Tamper-Log |
+| Privatsphäre | Cloud-Leak | Local-first |
+| Nachvollziehbarkeit | „Warum lädt nichts?“ | Statusanzeige ohne Eingriffsmöglichkeit |
 
-3. **Fail-safe nach Ausfallart**  
+### 8.3 VNB-Forderung: keine Endkunden-Modifikation am Steuerpfad
 
-   | Ausfall | Verhalten |
-   |---------|-----------|
-   | EMS-Prozess tot / Watchdog | Victron/SteuVE behalten **letzten sicheren** bzw. herstellerseitigen Zustand; AUX-Pfad des VNB wirkt weiter unabhängig vom EMS |
-   | MQTT zum Cerbo weg | keine neuen Writes; Alarm; nach Timeout konservative Defaults nur wo EMS allein verantwortlich ist |
-   | Steuerbox-Signal unklar / flattert | Entprellung; bei Ungültigkeit → **netzseitig sicherer** Zustand (eher limitieren) + Alarm |
-   | Wallbox/WP offline | Budget den erreichbaren Geräten zuweisen; offline melden |
+#### Physisch (primär, oft entscheidend für Abnahme)
 
-   Wichtig: Die **physische §14a-Kette (Steuerbox → AUX → Victron)** darf nicht vom EMS abhängen. Das EMS ist Zusatz-Intelligenz, kein Single Point of Failure für die Netzanforderung.
+1. **Steuerbox / SMGW-Ausgänge → AUX** nur im plombierten / schwer zugänglichen Bereich (Zählerschrank, zRfZ); Leitungen nicht über frei zugängliche Klemmstellen im Wohnbereich.
+2. **Keine kundenbedienbare Überbrückung** (kein Schalter parallel zu K1/K2).
+3. Victron-Master so konfigurieren, dass die **AUX-Reaktion herstellerseitig greift**, auch wenn EMS/App offline sind.
+4. Optional: plombierbarer Installateur-Zugang; Änderungen an AUX-Funktion nur mit Werkzeug/Fachrolle.
+5. Bei digitaler Steuerung später: EMS-/EEBus-Endpunkt im Technikbereich, nicht als „Heim-App-Server“ mit Root für den Kunden.
 
-4. **Menschliche Oberhoheit (Override)**  
-   - Modi: `Automatik` / `Nur beobachten` / `Manuell` (mit Timeout und Auto-Rückfall).  
-   - Notfall: „Boost / Komfort“ nur **innerhalb** erlaubter Netzgrenzen – Override darf §14a nicht aushebeln.  
-   - PIN/Rolle für Schreibrechte; Gast sieht nur Status.
+#### Software / EMS (verbindlich)
 
-5. **Transparenzpflicht gegenüber dem Nutzer**  
-   Jede Einschränkung zeigt: Quelle (VNB / Tarif / Eigenregel), erlaubte kW, betroffene Geräte, voraussichtliche Dauer wenn bekannt, Zeitpunkt der Aufhebung. Push/E-Mail bei Steuerfall und bei EMS-Störung.
+1. **`GridConstraint` immutable für Rolle `enduser`**
+   - API: keine PATCH/DELETE auf Netzlimits.
+   - UI: nur Anzeige (`active`, `budgetKw`, `source`, `since`).
+   - Schreibversuche → HTTP 403 + Tamper-Audit-Event.
 
-6. **Datenschutz & IT-Sicherheit (local-first)**  
-   - Mess- und Steuerdaten standardmäßig nur im LAN; Cloud optional und abschaltbar.  
-   - MQTT ohne Internet-Exposure; API mit Auth (z. B. OIDC oder starkes lokales Passwort + TLS).  
-   - Keine unnötigen Personenbezüge; Logs rotieren; Backup verschlüsselt.  
-   - DSGVO: Verarbeitungszwecke dokumentieren (Betrieb der Anlage), keine Weitergabe an Dritte ohne Grundlage.
+2. **Actuator-Guard mit Ceiling**
+   Jeder Schreibwunsch (Wallbox-A, Speicher-Netzladung, CurrentLimit) wird mit
+   `effective = min(userRequest, gridCeiling, safetyLimit)`
+   ausgeführt. `gridCeiling` kommt ausschließlich aus dem Netzsignal (bzw. Victron-AUX-Zustand), nie aus User-Config.
 
-7. **Wirtschaftlicher Schutz**  
-   - Netzentgelt-Modul und Steuerfälle im Log (Nachweis gegenüber VNB/MSB).  
-   - Aggressive Tarif-/Arbitrage-Strategien nur nach ausdrücklicher Aktivierung.  
-   - Soft-Limits gegen Tiefenentladung / Garantiebedingungen der Batterie (SoC-Floor aus Konfiguration, nicht hardcodiert „leer“).
+3. **Rollenmodell**
 
-### 8.3 Konkrete Umsetzung im Node.js-EMS
+   | Rolle | Darf |
+   |-------|------|
+   | `enduser` | Status lesen; Komfortprioritäten *unter* Ceiling; eigene Tarif-Opt-ins |
+   | `installer` | Erstinbetriebnahme, Gerätezuordnung, Zertifikate; zeitlich begrenzter Zugang |
+   | `system` | GridConstraint aus Steuerbox/EEBus/AUX-Input setzen |
+   | VNB/MSB | steuert nur über genormte Schnittstelle (Kontakte/EEBus), nicht über Kunden-UI |
+
+4. **Victron-/GX-Härtung**
+   - GX- und VRM-Zugangsdaten nicht dem Alltagskunden-Login überlassen bzw. getrennte Konten.
+   - Remote-Console / MQTT-Write nur aus dem EMS-Service-Account im LAN.
+   - Kunden-Dashboard spricht **nur die EMS-API**, nicht roh den MQTT-Broker mit Write-ACL.
+   - Broker-ACL: Endgeräte `subscribe` auf Status; nur `ems-controller` darf relevante Write-Topics publishen.
+
+5. **Kein netzignorierender Kundenmodus in Produktivbetrieb**
+   Diagnose (`Nur beobachten` / `Manuell`) höchstens für `installer` während Inbetriebnahme, danach deaktiviert. Produktiv: GridControl dauerhaft aktiv, UserComfort nur darunter.
+
+6. **Integrität**
+   - Signierte/versionierte Policy für Grid-Mapping.
+   - Append-only Audit: Steuerbefehle, Ceiling-Änderungen, fehlgeschlagene Bypass-Versuche, Installateur-Logins.
+   - Optional: Tamper-Erkennung (AUX inkonsistent, unerwartete Limit-Erhöhung) → Alarm an Betrieb/Installateur.
+
+### 8.4 Was der Endkunde weiterhin darf (ohne VNB-Konflikt)
+
+- Sehen: ob Netzsteuerung aktiv ist, welches Limit gilt, welche Geräte gedimmt sind.
+- Wählen: Reihenfolge/Priorität **innerhalb** des Restbudgets (WP vs. Wallbox).
+- Setzen: Wunschzeiten („Auto bis 7:00 möglichst voll“) – Erfüllung nur wenn Ceiling und PV/SoC es erlauben.
+- Opt-in: dynamischer Tarif / Peak-Shaving für **nicht netzgesperrte** Freiheitsgrade.
+- Benachrichtigungen erhalten.
+
+**Nicht erlaubt:** Limit anheben, Steuerfall ignorieren, AUX/EEBus umgehen, EMS in einen netzignorierenden Modus schalten, Rohzugriff auf Write-Topics.
+
+### 8.5 Schutzprinzipien (Kurzform)
+
+1. **Netzbefehl > Komfort > Optimierung** – technisch erzwungen, nicht nur dokumentiert.
+2. **Mindestleistung statt hartem Aus**, soweit Befehl/Geräteklasse das vorsehen.
+3. **Fail-safe:** AUX-Pfad unabhängig vom EMS; EMS-Ausfall darf Steuerbarkeit nicht entfernen.
+4. **Transparenz ohne Eingriff:** erklären, nicht freischalten.
+5. **Local-first & Härtung:** kein Internet-MQTT; least privilege.
+6. **Wirtschaftlicher Schutz:** Steuerfall-Log für Netzentgelt-Nachweis; Batterie-SoC-Floor als Safety (nicht als Bypass).
+
+### 8.6 Konkrete Umsetzung im Node.js-EMS
 
 ```text
-Incoming signal / sensor
-        │
-        ▼
-┌───────────────────┐
-│ validate + debounce│  → ungültig? safe default + alarm
-└─────────┬─────────┘
-          ▼
-┌───────────────────┐
-│ Policy stack      │  1) GridConstraint (§14a)
-│                   │  2) SafetyLimits (SoC, Temp, max A)
-│                   │  3) UserPriorities (WP, EV deadline)
-│                   │  4) Optimization (Tarif, Peak)
-└─────────┬─────────┘
-          ▼
-┌───────────────────┐
-│ Actuator guard    │  rate-limit · range-check · ack
-└─────────┬─────────┘
-          ▼
-   device writes + audit log + user notification
+VNB/Steuerbox/AUX/EEBus ──► GridConstraint (system-only, read-only für enduser)
+                                    │
+                                    ▼ gridCeilingKw
+UserComfort request ──► clamp(min(request, ceiling, safety)) ──► actuators
+                                    │
+                                    ▼
+                             audit + status UI (read-only für Grid)
 ```
-
-**Software-Bausteine:**
 
 | Baustein | Aufgabe |
 |----------|---------|
-| `SafetyLimits` | harte Grenzen: min/max Strom, SoC-Floor/Ceiling, max Schreibrate |
-| `UserPolicy` | Prioritäten, Ladeziel „fertig bis 7:00“, WP-Komfortstufe |
-| `Watchdog` | periodischer Heartbeat; bei Ausfall Supervisor (Docker/`systemd`) restart |
-| `AuditLog` | unveränderliche Events (append-only / DB), exportierbar |
-| `StatusAPI` | `constraint.active`, `reason`, `budgetKw`, `overrides` für UI |
-| `Notify` | Steuerfall / Störung / Override abgelaufen |
+| `GridConstraint` | nur `system`/`installer`-Bootstrap; Ceiling aus Netzsignal |
+| `ActuatorGuard` | erzwingt Ceiling; blockt Bypass-Writes |
+| `UserPolicy` | Prioritäten unterhalb Ceiling |
+| `SafetyLimits` | SoC-Floor, max. Schreibrate, Geräte-max |
+| `Rbac` | `enduser` / `installer` / `system` |
+| `TamperAudit` | Bypass-Versuche, Limit-Inkonsistenzen |
+| `StatusAPI` | Anzeige ohne Schreibfelder für Grid |
+| `Watchdog` | EMS-Neustart; Grid-Pfad bleibt über Victron/AUX |
 
-**Prioritätsbeispiel im Limit-Fall (4,2 kW Budget):** zuerst WP-Mindestbetrieb, Rest Wallbox wenn Deadline kritisch, Speicher-Netzladung zuletzt oder 0.
+**Prioritätsbeispiel im Limit-Fall (4,2 kW Ceiling):** WP-Mindestbetrieb → Wallbox wenn Deadline → Speicher-Netzladung zuletzt; Summe netzwirksam ≤ Ceiling.
 
-### 8.4 Physische / organisatorische Schutzmaßnahmen
+### 8.7 Organisatorisch gegenüber VNB / Installateur
 
-- Elektroinstallation und FI/Absicherung durch Fachkraft; EMS ersetzt keine Schutzorgane.  
-- Getrenntes Technik-VLAN; Cerbo und EMS nicht im Gäste-WLAN.  
-- USV für GX/EMS optional, damit Steuerung bei kurzen Netzblips nicht „taub“ wird.  
-- Betriebsanleitung: was der Nutzer bei Steuerfall erwarten darf; wann Elektriker/VNB.  
-- Klare Rollen: wer darf Regeln ändern (Eigentümer vs. Installateur-Fernwartung mit zeitlich begrenztem Zugang).
+- In der Anlagenbeschreibung festhalten: Endkunde hat **keinen** parametrisierenden Zugang zur Steuerfunktion.
+- Installateur-Passwörter / Service-Zugänge nach IBN ändern und nicht in Kundenunterlagen legen.
+- Abnahmeprotokoll: Steuerfall simulieren; parallel prüfen, dass Kunden-UI das Limit nicht anheben kann.
+- Änderungen an GridControl nur über dokumentierten Serviceprozess (Installateur vor Ort / protokollierte Fernwartung).
 
-### 8.5 Kurzfristig umsetzbar (Endanwenderschutz)
+### 8.8 Kurzfristig umsetzbar
 
-1. AUX-Pfad unabhängig vom EMS testen und dokumentieren.  
-2. Dashboard: „Netzsteuerung aktiv – Ursache / Limit“.  
-3. SoC-Mindestwert und max. Wallbox-Strom als Konfiguration.  
-4. Watchdog + Alarm bei EMS-/MQTT-Ausfall.  
-5. Modus „Nur beobachten“ als Default bis Regeln freigeschaltet werden.  
-6. Audit-Log der ersten Steuerfälle.
+1. AUX verdrahten, vom Wohnbereich trennen/plombierbar; herstellerseitige Victron-Reaktion testen.
+2. EMS: Rolle `enduser` ohne Write auf Limits; ActuatorGuard mit Ceiling.
+3. MQTT-ACL: Kunde/UI nur lesen.
+4. Dashboard nur Status „Netzsteuerung aktiv – Limit x kW“.
+5. Tamper-Audit + Alarm bei Bypass-Versuch.
+6. Abnahme-Checkliste VNB: „Endkunde kann Steuerung nicht deaktivieren“.
 
 ---
 
@@ -386,12 +408,13 @@ Incoming signal / sensor
 |--------|------------|
 | Falsche AUX-Logik / Firmware | Nur nach Herstellererklärung; Integrationstest mit VNB-Signal |
 | MQTT Write zerstört ESS-Regelung | Schreibfrequenz begrenzen; ESS-Modi nicht ungeprüft umschalten |
+| Endkunde umgeht §14a | Plombierter AUX-Pfad, RBAC, ActuatorGuard-Ceiling, kein Roh-MQTT für Kunden-UI |
 | EEBus noch nicht greifbar | Abstraktion + physische Vorbereitung; ggf. Gateway kaufen |
-| Scope-Creep (volles Smart Home) | EMS-Kern: Leistung + SteuVE; HA optional daneben |
+| Scope-Creep (volles Smart Home) | EMS-Kern: Leistung + SteuVE; HA optional daneben, ohne Write auf GridControl |
 | Haftung bei Fehlsteuerung | Fail-safe, Logs, klare Betriebsverantwortung |
-| Komfortverlust durch EMS | Prioritäten, Mindestleistung, Override innerhalb §14a, Transparenz-UI |
+| Komfortverlust durch EMS | Prioritäten unter Ceiling, Transparenz-UI (ohne Bypass) |
 
-**Architekturentscheidung früh treffen:** EMS extern (empfohlen) vs. alles in Node-RED auf dem GX. Extern skaliert besser für Wallbox/Tarife/EEBus; Node-RED ist ideal als Stufe A/B-Beschleuniger.
+**Architekturentscheidung früh treffen:** EMS extern (empfohlen) vs. alles in Node-RED auf dem GX. Extern skaliert besser für Wallbox/Tarife/EEBus und für getrennte Kunden-/Service-Zugänge; Node-RED ist ideal als Stufe A/B-Beschleuniger, aber Write-ACLs und Rollen dort genauso hart setzen.
 
 ---
 
@@ -403,8 +426,11 @@ Incoming signal / sensor
 - [ ] Mindestens eine zusätzliche SteuVE wird im Limit-Fall aktiv reduziert
 - [ ] Fail-safe bei Kommunikationsverlust dokumentiert und getestet
 - [ ] Schalt- und Signalplan für Elektriker/VNB vorhanden
-- [ ] Nutzer sichtbarer Steuerstatus (Ursache + Limit) und Modus „Nur beobachten“
+- [ ] Endkunde sieht Steuerstatus (Ursache + Limit), kann GridControl **nicht** ändern
+- [ ] ActuatorGuard erzwingt `gridCeiling`; Bypass-Versuch wird auditiert
+- [ ] MQTT/API: Endkunden-Zugang ohne Write auf Steuer-Topics
 - [ ] SafetyLimits (SoC-Floor, max. Schreibrate) und Watchdog aktiv
+- [ ] Abnahmepunkt „keine Endkunden-Modifikation der Netzsteuerung“ dokumentiert
 
 ---
 
@@ -413,6 +439,7 @@ Incoming signal / sensor
 1. `packages/victron-mqtt`: Topic-Katalog und Read/Write-Client.
 2. `apps/collector`: Dienst mit Health-Endpoint.
 3. `packages/rules`: reine Funktionen für §14a-Allokation + Tests.
-4. `packages/safety`: SafetyLimits, Watchdog-Vertrag, Fail-safe-Defaults.
-5. `docs/vnb-checkliste.md`: Fragenkatalog Netzbetreiber.
-6. Optional: Docker-Compose für lokale Simulation mit Fixture-Publisher.
+4. `packages/safety`: SafetyLimits, ActuatorGuard-Ceiling, Watchdog, Fail-safe-Defaults.
+5. `packages/rbac`: Rollen `enduser` / `installer` / `system`, TamperAudit.
+6. `docs/vnb-checkliste.md`: Fragenkatalog Netzbetreiber inkl. Manipulationsschutz.
+7. Optional: Docker-Compose für lokale Simulation mit Fixture-Publisher.

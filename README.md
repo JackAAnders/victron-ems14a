@@ -11,4 +11,5 @@ Planung und Umsetzung eines Energiemanagementsystems (EMS) für Victron-ESS mit 
 - Victron Venus OS als energetische Basis (MQTT/Modbus)
 - EMS-Policy-Layer bevorzugt in **Node.js/TypeScript**
 - Kurzfristig: Monitoring, lokale Optimierung, AUX-basierte §14a-Koordination
+- Manipulationsschutz: Endkunde kann GridControl (§14a) nicht deaktivieren; Komfort nur unter Ceiling
 - Mittelfristig: SteuVE-Allokation, Audit-Log, Vorbereitung digitaler Netzsteuerung (EEBus)
