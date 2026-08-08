@@ -1,15 +1,47 @@
 # victron-ems14a
 
-Planung und Umsetzung eines Energiemanagementsystems (EMS) für Victron-ESS mit Fokus auf §14a EnWG.
+Energiemanagementsystem für Victron-ESS mit manipulationssicherer §14a-Steuerung.
 
 ## Dokumente
 
-- **[PLAN.md](./PLAN.md)** – physische und informatische Umsetzung, Rechtslage, Endanwenderschutz, Kurzfristziele, Phasen
+- **[PLAN.md](./PLAN.md)** – Anforderungen, Rechtslage, Physik, Endanwenderschutz
+- **[docs/IMPLEMENTATION.md](./docs/IMPLEMENTATION.md)** – konkrete technische Umsetzung
 
-## Geplante Richtung
+## Prinzip
 
-- Victron Venus OS als energetische Basis (MQTT/Modbus)
-- EMS-Policy-Layer bevorzugt in **Node.js/TypeScript**
-- Kurzfristig: Monitoring, lokale Optimierung, AUX-basierte §14a-Koordination
-- Manipulationsschutz: Endkunde kann GridControl (§14a) nicht deaktivieren; Komfort nur unter Ceiling
-- Mittelfristig: SteuVE-Allokation, Audit-Log, Vorbereitung digitaler Netzsteuerung (EEBus)
+- **GridControl** (VNB/AUX/EEBus): für Endkunden gesperrt
+- **UserComfort**: Wünsche nur unter `gridCeiling`
+- `ActuatorGuard` erzwingt `effective <= ceiling`
+
+## Repo-Struktur
+
+```text
+packages/domain      Typen
+packages/safety      GridConstraint, ActuatorGuard
+packages/rules       Allokation unter Ceiling
+packages/rbac        Rollen enduser/installer/system
+packages/victron-mqtt  Gateway-Interface + InMemory-Stub
+apps/controller      Control-Loop
+apps/api             HTTP-API (Status, Comfort, gesperrtes Grid-Write)
+```
+
+## Schnellstart
+
+```bash
+npm install
+npm test
+npm start -w @victron-ems14a/api
+```
+
+API (Header `X-Role: enduser|installer|system`):
+
+- `GET /status` – Ceiling + Wunsch (Grid nicht schreibbar für enduser)
+- `PUT /comfort` – Komfortwunsch
+- `POST /grid/signal` – nur installer/system
+- `POST /control/tick` – ein Regelzyklus gegen InMemory-Victron
+
+Dry-Run Controller:
+
+```bash
+npm start -w @victron-ems14a/controller
+```
