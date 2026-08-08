@@ -74,18 +74,19 @@ Kurz: MPPT nur lesen/aggregieren; Multi liefert ESS + AUX-§14a; EMS schreibt vo
 
 ### Sprint 2 – Victron MultiPlus + MPPT lesen
 
-- Venus MQTT: `solarcharger` (MPPT), `vebus` (Multi), `system`/`battery`, `grid`, `digitalinput`
-- PV aggregieren; AUX → `GridSignal`
-- Write nur Service-Account / ACL
-- `collector` publiziert `PlantState` inkl. `mppt[]`
-- Fixtures von echter Anlage
+- [x] Topic-Parser, `VenusValueCache`, `plantStateFromCache` (MPPT-Summe)
+- [x] AUX/`digitalinput` → `GridSignal`
+- [x] `VenusMqttGateway` (mqtt.js + keepalive)
+- [x] `apps/collector` (Live-URL oder InMemory-Demo)
+- [ ] Fixtures von echter Kundenanlage einchecken
 
 ### Sprint 3 – Wallbox-Adapter
 
-- `packages/wallbox`: Interface + Victron EVCS und/oder Drittanbieter
-- Surplus-Laden (MPPT − Hauslast) mit Hysterese / Min. 6 A
-- Unter §14a: `ActuatorGuard` auf Wallbox + Multi-Netzladung
-- ESS vorerst Mode 1; kein Pflicht-Umstieg auf Mode 2/3
+- [x] `packages/wallbox`: Interface, InMemory, `VictronEvcsAdapter` (SetCurrent)
+- [x] Surplus-Hysterese + Min.-Strom (6 A)
+- [x] Controller setzt Wallbox unter ActuatorGuard
+- [ ] Drittanbieter-Wallbox (go-e/Modbus) bei Bedarf
+- [ ] ESS Mode 2/3 nur später optional
 
 ### Sprint 4 – API & Endkunden-UI
 

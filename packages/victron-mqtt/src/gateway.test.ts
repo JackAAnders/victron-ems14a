@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { InMemoryVictronGateway } from "./index.js";
+import { InMemoryVictronGateway } from "./inMemory.js";
 
 describe("InMemoryVictronGateway", () => {
   it("maps AUX limited to 4.2 kW ceiling signal", async () => {

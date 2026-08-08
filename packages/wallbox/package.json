@@ -1,5 +1,5 @@
 {
-  "name": "@victron-ems14a/victron-mqtt",
+  "name": "@victron-ems14a/wallbox",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,10 +15,9 @@
   },
   "dependencies": {
     "@victron-ems14a/domain": "0.1.0",
-    "mqtt": "^5.13.0"
+    "@victron-ems14a/victron-mqtt": "0.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.15.21",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }

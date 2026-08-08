@@ -18,7 +18,8 @@
     "@victron-ems14a/domain": "0.1.0",
     "@victron-ems14a/rules": "0.1.0",
     "@victron-ems14a/safety": "0.1.0",
-    "@victron-ems14a/victron-mqtt": "0.1.0"
+    "@victron-ems14a/victron-mqtt": "0.1.0",
+    "@victron-ems14a/wallbox": "0.1.0"
   },
   "devDependencies": {
     "tsx": "^4.20.3",

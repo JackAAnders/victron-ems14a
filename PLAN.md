@@ -445,10 +445,14 @@ Erledigt (Sprint 1 – siehe `docs/IMPLEMENTATION.md`):
 2. `apps/controller` Control-Loop, `apps/api` mit RBAC
 3. `docs/vnb-checkliste.md`, Unit-Tests für Ceiling/RBAC
 
-Als Nächstes (Anlage MultiPlus + MPPT + Wallbox):
+Erledigt zusätzlich (Sprint 2/3 Kern):
 
-1. Venus-MQTT: MPPT/`solarcharger`, Multi/`vebus`, AUX→GridSignal
-2. `packages/wallbox` + Surplus-Laden mit Hysterese
-3. `apps/collector` + Persistenz/Audit-Store
-4. Status-UI (PV/MPPT, Wallbox, Ceiling read-only)
-5. Watchdog / Docker-Compose + VNB-Abnahme
+- Venus-MQTT Client/Cache/AUX-Mapping, Collector
+- `packages/wallbox` + Surplus-Hysterese, Controller-Anbindung
+
+Als Nächstes:
+
+1. Live-Test am Cerbo (Portal-ID, AUX-Instanz feinjustieren)
+2. Persistenz/Audit-Store + Status-UI
+3. Docker host-network auf EMS-Mini-PC
+4. VNB-Abnahmeprotokoll mit realem Steuerfall
