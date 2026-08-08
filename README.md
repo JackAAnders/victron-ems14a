@@ -2,7 +2,24 @@
 
 Energiemanagementsystem für Victron **MultiPlus + MPPT + Wallbox** mit manipulationssicherer §14a-Steuerung.
 
-## Dokumente
+## Spec Kit (GitHub Spec-Driven Development)
+
+Projekt ist mit [GitHub Spec Kit](https://github.com/github/spec-kit) initialisiert.
+
+| Artefakt | Pfad |
+|----------|------|
+| Constitution | [`.specify/memory/constitution.md`](./.specify/memory/constitution.md) |
+| Feature-Spec | [`specs/001-ems-multiplus-wallbox/spec.md`](./specs/001-ems-multiplus-wallbox/spec.md) |
+| Plan | [`specs/001-ems-multiplus-wallbox/plan.md`](./specs/001-ems-multiplus-wallbox/plan.md) |
+| Tasks | [`specs/001-ems-multiplus-wallbox/tasks.md`](./specs/001-ems-multiplus-wallbox/tasks.md) |
+
+```bash
+export SPECIFY_FEATURE=001-ems-multiplus-wallbox
+export SPECIFY_FEATURE_DIRECTORY=specs/001-ems-multiplus-wallbox
+# Agent: /speckit-implement · /speckit-converge · /speckit-analyze
+```
+
+## Dokumente (Hintergrund)
 
 - **[PLAN.md](./PLAN.md)** – Anforderungen, Rechtslage, Physik, Endanwenderschutz
 - **[docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md](./docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md)** – Anlagenplan
