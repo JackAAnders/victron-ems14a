@@ -434,12 +434,18 @@ UserComfort request ──► clamp(min(request, ceiling, safety)) ──► act
 
 ---
 
-## 11. Nächste konkrete Arbeitspakete im Repo
+## 11. Arbeitspakete im Repo
 
-1. `packages/victron-mqtt`: Topic-Katalog und Read/Write-Client.
-2. `apps/collector`: Dienst mit Health-Endpoint.
-3. `packages/rules`: reine Funktionen für §14a-Allokation + Tests.
-4. `packages/safety`: SafetyLimits, ActuatorGuard-Ceiling, Watchdog, Fail-safe-Defaults.
-5. `packages/rbac`: Rollen `enduser` / `installer` / `system`, TamperAudit.
-6. `docs/vnb-checkliste.md`: Fragenkatalog Netzbetreiber inkl. Manipulationsschutz.
-7. Optional: Docker-Compose für lokale Simulation mit Fixture-Publisher.
+Erledigt (Sprint 1 – siehe `docs/IMPLEMENTATION.md`):
+
+1. `packages/domain`, `safety`, `rules`, `rbac`, `victron-mqtt` (Interface + InMemory)
+2. `apps/controller` Control-Loop, `apps/api` mit RBAC
+3. `docs/vnb-checkliste.md`, Unit-Tests für Ceiling/RBAC
+
+Als Nächstes:
+
+1. Echter Venus-MQTT-Client (Topics lesen/schreiben, ACL-Doku)
+2. `apps/collector` + Persistenz/Audit-Store
+3. Watchdog / Docker-Compose
+4. Endkunden-Status-UI (read-only Grid)
+5. Wallbox-Adapter unter ActuatorGuard
