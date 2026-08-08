@@ -269,7 +269,118 @@ Produktiv: Typen, Unit-Tests für Grenzfälle (0 PV, voller Speicher, 3-Phasen-U
 
 ---
 
-## 8. Risiken und Entscheidungen
+## 8. Endanwenderschutz
+
+„Endanwenderschutz“ meint hier den Schutz von Komfort, Sicherheit, Daten und wirtschaftlicher Position des Anlagenbetreibers – nicht den Ersatz für Normen der Elektrofachplanung.
+
+### 8.1 Was geschützt werden muss
+
+| Schutzgut | Risiko ohne Schutz | EMS-Antwort |
+|-----------|-------------------|-------------|
+| Wohnkomfort / Wärme | WP dauerhaft zu stark gedimmt | Prioritäten, Mindestleistung, Zeitbudgets |
+| Mobilität | Auto morgens leer | Lade-Garantiefenster, Priorität vor Speicher-Netzladung |
+| Versorgungssicherheit | EMS-Crash lässt Anlage in falschem Limit | Watchdog, Fail-safe, Hardware-Fallback (AUX/Victron) |
+| Netzkonformität | Falsches Nicht-Dimmen → Ärger mit VNB / Modulverlust | verbindliche §14a-Einhaltung vor Komfort-Optimierung |
+| Vermögen / Tarife | unnötiger Netzbezug, falsche Entladung | erklärbare Regeln, Simulation, Opt-in für aggressive Strategien |
+| Privatsphäre | Cloud leakt Verbrauchsprofile | Local-first, minimale Cloud, Zweckbindung |
+| Manipulation | offenes MQTT / Remote-Write | Auth, Netzsegmentierung, keine Portfreigabe |
+| Nachvollziehbarkeit | „Warum lädt nichts?“ | UI + Audit: Ursache in Klartext |
+
+### 8.2 Schutzprinzipien (verbindlich für die Implementierung)
+
+1. **Gesetz vor Komfort vor Optimierung**  
+   Ein aktiver §14a-/Netzbefehl hat Vorrang. Innerhalb des erlaubten Budgets maximiert das EMS Komfort (WP → Wallbox-Deadline → Speicher-Netzladung).
+
+2. **Mindestversorgung statt hartem Aus**  
+   Dimmen auf die jeweils zulässige **Mindestbezugsleistung** (nicht willkürlich auf 0), sofern der Steuerbefehl und die Geräteklasse das hergeben. Nicht-SteuVE (Herd, Licht) bleiben unberührt – EMS darf sie nicht „mitabwürgen“.
+
+3. **Fail-safe nach Ausfallart**  
+
+   | Ausfall | Verhalten |
+   |---------|-----------|
+   | EMS-Prozess tot / Watchdog | Victron/SteuVE behalten **letzten sicheren** bzw. herstellerseitigen Zustand; AUX-Pfad des VNB wirkt weiter unabhängig vom EMS |
+   | MQTT zum Cerbo weg | keine neuen Writes; Alarm; nach Timeout konservative Defaults nur wo EMS allein verantwortlich ist |
+   | Steuerbox-Signal unklar / flattert | Entprellung; bei Ungültigkeit → **netzseitig sicherer** Zustand (eher limitieren) + Alarm |
+   | Wallbox/WP offline | Budget den erreichbaren Geräten zuweisen; offline melden |
+
+   Wichtig: Die **physische §14a-Kette (Steuerbox → AUX → Victron)** darf nicht vom EMS abhängen. Das EMS ist Zusatz-Intelligenz, kein Single Point of Failure für die Netzanforderung.
+
+4. **Menschliche Oberhoheit (Override)**  
+   - Modi: `Automatik` / `Nur beobachten` / `Manuell` (mit Timeout und Auto-Rückfall).  
+   - Notfall: „Boost / Komfort“ nur **innerhalb** erlaubter Netzgrenzen – Override darf §14a nicht aushebeln.  
+   - PIN/Rolle für Schreibrechte; Gast sieht nur Status.
+
+5. **Transparenzpflicht gegenüber dem Nutzer**  
+   Jede Einschränkung zeigt: Quelle (VNB / Tarif / Eigenregel), erlaubte kW, betroffene Geräte, voraussichtliche Dauer wenn bekannt, Zeitpunkt der Aufhebung. Push/E-Mail bei Steuerfall und bei EMS-Störung.
+
+6. **Datenschutz & IT-Sicherheit (local-first)**  
+   - Mess- und Steuerdaten standardmäßig nur im LAN; Cloud optional und abschaltbar.  
+   - MQTT ohne Internet-Exposure; API mit Auth (z. B. OIDC oder starkes lokales Passwort + TLS).  
+   - Keine unnötigen Personenbezüge; Logs rotieren; Backup verschlüsselt.  
+   - DSGVO: Verarbeitungszwecke dokumentieren (Betrieb der Anlage), keine Weitergabe an Dritte ohne Grundlage.
+
+7. **Wirtschaftlicher Schutz**  
+   - Netzentgelt-Modul und Steuerfälle im Log (Nachweis gegenüber VNB/MSB).  
+   - Aggressive Tarif-/Arbitrage-Strategien nur nach ausdrücklicher Aktivierung.  
+   - Soft-Limits gegen Tiefenentladung / Garantiebedingungen der Batterie (SoC-Floor aus Konfiguration, nicht hardcodiert „leer“).
+
+### 8.3 Konkrete Umsetzung im Node.js-EMS
+
+```text
+Incoming signal / sensor
+        │
+        ▼
+┌───────────────────┐
+│ validate + debounce│  → ungültig? safe default + alarm
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│ Policy stack      │  1) GridConstraint (§14a)
+│                   │  2) SafetyLimits (SoC, Temp, max A)
+│                   │  3) UserPriorities (WP, EV deadline)
+│                   │  4) Optimization (Tarif, Peak)
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│ Actuator guard    │  rate-limit · range-check · ack
+└─────────┬─────────┘
+          ▼
+   device writes + audit log + user notification
+```
+
+**Software-Bausteine:**
+
+| Baustein | Aufgabe |
+|----------|---------|
+| `SafetyLimits` | harte Grenzen: min/max Strom, SoC-Floor/Ceiling, max Schreibrate |
+| `UserPolicy` | Prioritäten, Ladeziel „fertig bis 7:00“, WP-Komfortstufe |
+| `Watchdog` | periodischer Heartbeat; bei Ausfall Supervisor (Docker/`systemd`) restart |
+| `AuditLog` | unveränderliche Events (append-only / DB), exportierbar |
+| `StatusAPI` | `constraint.active`, `reason`, `budgetKw`, `overrides` für UI |
+| `Notify` | Steuerfall / Störung / Override abgelaufen |
+
+**Prioritätsbeispiel im Limit-Fall (4,2 kW Budget):** zuerst WP-Mindestbetrieb, Rest Wallbox wenn Deadline kritisch, Speicher-Netzladung zuletzt oder 0.
+
+### 8.4 Physische / organisatorische Schutzmaßnahmen
+
+- Elektroinstallation und FI/Absicherung durch Fachkraft; EMS ersetzt keine Schutzorgane.  
+- Getrenntes Technik-VLAN; Cerbo und EMS nicht im Gäste-WLAN.  
+- USV für GX/EMS optional, damit Steuerung bei kurzen Netzblips nicht „taub“ wird.  
+- Betriebsanleitung: was der Nutzer bei Steuerfall erwarten darf; wann Elektriker/VNB.  
+- Klare Rollen: wer darf Regeln ändern (Eigentümer vs. Installateur-Fernwartung mit zeitlich begrenztem Zugang).
+
+### 8.5 Kurzfristig umsetzbar (Endanwenderschutz)
+
+1. AUX-Pfad unabhängig vom EMS testen und dokumentieren.  
+2. Dashboard: „Netzsteuerung aktiv – Ursache / Limit“.  
+3. SoC-Mindestwert und max. Wallbox-Strom als Konfiguration.  
+4. Watchdog + Alarm bei EMS-/MQTT-Ausfall.  
+5. Modus „Nur beobachten“ als Default bis Regeln freigeschaltet werden.  
+6. Audit-Log der ersten Steuerfälle.
+
+---
+
+## 9. Risiken und Entscheidungen
 
 | Risiko | Mitigation |
 |--------|------------|
@@ -278,12 +389,13 @@ Produktiv: Typen, Unit-Tests für Grenzfälle (0 PV, voller Speicher, 3-Phasen-U
 | EEBus noch nicht greifbar | Abstraktion + physische Vorbereitung; ggf. Gateway kaufen |
 | Scope-Creep (volles Smart Home) | EMS-Kern: Leistung + SteuVE; HA optional daneben |
 | Haftung bei Fehlsteuerung | Fail-safe, Logs, klare Betriebsverantwortung |
+| Komfortverlust durch EMS | Prioritäten, Mindestleistung, Override innerhalb §14a, Transparenz-UI |
 
 **Architekturentscheidung früh treffen:** EMS extern (empfohlen) vs. alles in Node-RED auf dem GX. Extern skaliert besser für Wallbox/Tarife/EEBus; Node-RED ist ideal als Stufe A/B-Beschleuniger.
 
 ---
 
-## 9. Definition of Done (erste nutzbare Version)
+## 10. Definition of Done (erste nutzbare Version)
 
 - [ ] Live-Messwerte aus Venus im EMS
 - [ ] Mindestens eine automatische Optimierungsregel aktiv
@@ -291,13 +403,16 @@ Produktiv: Typen, Unit-Tests für Grenzfälle (0 PV, voller Speicher, 3-Phasen-U
 - [ ] Mindestens eine zusätzliche SteuVE wird im Limit-Fall aktiv reduziert
 - [ ] Fail-safe bei Kommunikationsverlust dokumentiert und getestet
 - [ ] Schalt- und Signalplan für Elektriker/VNB vorhanden
+- [ ] Nutzer sichtbarer Steuerstatus (Ursache + Limit) und Modus „Nur beobachten“
+- [ ] SafetyLimits (SoC-Floor, max. Schreibrate) und Watchdog aktiv
 
 ---
 
-## 10. Nächste konkrete Arbeitspakete im Repo
+## 11. Nächste konkrete Arbeitspakete im Repo
 
 1. `packages/victron-mqtt`: Topic-Katalog und Read/Write-Client.
 2. `apps/collector`: Dienst mit Health-Endpoint.
 3. `packages/rules`: reine Funktionen für §14a-Allokation + Tests.
-4. `docs/vnb-checkliste.md`: Fragenkatalog Netzbetreiber.
-5. Optional: Docker-Compose für lokale Simulation mit Fixture-Publisher.
+4. `packages/safety`: SafetyLimits, Watchdog-Vertrag, Fail-safe-Defaults.
+5. `docs/vnb-checkliste.md`: Fragenkatalog Netzbetreiber.
+6. Optional: Docker-Compose für lokale Simulation mit Fixture-Publisher.
