@@ -4,7 +4,7 @@ Planung und Umsetzung eines Energiemanagementsystems (EMS) für Victron-ESS mit 
 
 ## Dokumente
 
-- **[PLAN.md](./PLAN.md)** – physische und informatische Umsetzung, Rechtslage, Kurzfristziele, Phasen
+- **[PLAN.md](./PLAN.md)** – physische und informatische Umsetzung, Rechtslage, Endanwenderschutz, Kurzfristziele, Phasen
 
 ## Geplante Richtung
 
