@@ -8,7 +8,7 @@ describe("allocateUnderCeiling", () => {
     const setpoints = allocateUnderCeiling({
       ceilingKw: 4.2,
       limits: DEFAULT_SAFETY_LIMITS,
-      wish: {},
+      wish: { heatPump: { preferOn: true } },
       state: {
         pvKw: 0,
         houseLoadKw: 0.5,
@@ -19,9 +19,28 @@ describe("allocateUnderCeiling", () => {
     });
 
     assert.ok(setpoints.heatPumpKw > 0);
+    assert.ok(setpoints.heatPump.mode === "level" || setpoints.heatPump.mode === "on");
     assert.ok(
       setpoints.heatPumpKw + setpoints.wallboxKw + setpoints.batteryGridChargeKw <=
         4.2 + 1e-9,
     );
+  });
+
+  it("passes EEG §9 feed-in cap through", () => {
+    const setpoints = allocateUnderCeiling({
+      ceilingKw: 11,
+      maxFeedInKw: 6,
+      limits: DEFAULT_SAFETY_LIMITS,
+      wish: {},
+      state: {
+        pvKw: 8,
+        houseLoadKw: 1,
+        batterySocPercent: 80,
+        batteryPowerKw: 0,
+        gridPowerKw: -5,
+        pvRatedKw: 10,
+      },
+    });
+    assert.equal(setpoints.maxFeedInKw, 6);
   });
 });

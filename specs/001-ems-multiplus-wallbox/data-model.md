@@ -3,93 +3,54 @@
 ## Enumerations
 
 - **Role**: `enduser` | `installer` | `system`
-- **GridMode**: `normal` | `limited` | `off`
-- **GridSignalSource**: `aux` | `eebus` | `steuerbox` | `manual_installer`
-- **AuditKind**: `grid_signal` | `setpoints_applied` | `bypass_denied` | `forbidden_write`
+- **GridMode** (§14a): `normal` | `limited` | `off`
+- **FeedInMode** (§9): `normal` | `curtailed` | `zero`
+- **HeatPumpSignalMode**: `off` | `on` | `level`
+- **AuditKind**: `grid_signal` | `feedin_signal` | `setpoints_applied` | `bypass_denied` | `forbidden_write`
 
-## Entities
-
-### MpptState
-
-| Field | Type | Notes |
-|-------|------|-------|
-| id | string | Venus instance id |
-| powerKw | number | from Yield/Power (W→kW) |
-| state | number? | Victron charge state code |
-
-### WallboxState
+## GridSignal (§14a)
 
 | Field | Type | Notes |
 |-------|------|-------|
-| id | string | |
-| powerKw | number | measured |
-| maxKw | number | from max current × volts × phases |
-| connected | boolean | |
-| charging | boolean | |
-
-### PlantState
-
-| Field | Type | Notes |
-|-------|------|-------|
-| pvKw | number | sum MPPT or system Dc/Pv |
-| mppt | MpptState[]? | |
-| houseLoadKw | number | consumption − wallbox |
-| batterySocPercent | number | |
-| batteryPowerKw | number | |
-| gridPowerKw | number | import positive convention in EMS |
-| wallbox | WallboxState? | |
-
-### GridSignal
-
-| Field | Type | Notes |
-|-------|------|-------|
-| source | GridSignalSource | never from enduser config |
+| source | GridSignalSource | aux/steuerbox/eebus/… |
 | mode | GridMode | |
-| maxSteuveGridKw | number | ceiling; Infinity when normal |
-| receivedAt | ISO string | |
+| maxSteuveGridKw | number | offtake ceiling |
+| receivedAt | ISO | |
 
-### UserComfortWish
-
-| Field | Type | Notes |
-|-------|------|-------|
-| wallboxKw | number? | desire before clamp |
-| priority | { heatPump, wallbox, batteryGridCharge }? | |
-| wallboxReadyBy | ISO string? | deadline boost |
-
-### PowerSetpoints
+## FeedInSignal (§9)
 
 | Field | Type | Notes |
 |-------|------|-------|
-| heatPumpKw | number | MVP typically 0 |
-| wallboxKw | number | |
-| batteryGridChargeKw | number | |
+| source | GridSignalSource | rundsteuerung/steuerbox/… |
+| mode | FeedInMode | |
+| maxFeedInPercent | number? | 0..1 of pvRatedKw |
+| maxFeedInKw | number? | absolute override |
+| receivedAt | ISO | |
 
-### SafetyLimits
-
-Defaults: SoC floor/ceiling, max wallbox/battery/HP kW, max write Hz.
-
-### AuditEvent
+## HeatPumpCommand
 
 | Field | Type | Notes |
 |-------|------|-------|
-| kind | AuditKind | |
-| at | ISO string | |
-| role | Role? | |
-| detail | object | payload |
+| mode | off/on/level | |
+| level | 0..maxHeatPumpLevel | 0=off/blocked … 3=forced/max |
+| powerKw | number | budget for ceiling math |
 
-## Relationships
+## PowerSetpoints
 
-```text
-GridSignal --(system apply)--> GridConstraint.ceiling
-PlantState + UserComfortWish --> allocateUnderCeiling --> PowerSetpoints (requested)
-requested + ceiling + surplus --> ActuatorGuard --> PowerSetpoints (effective)
-effective.wallboxKw --> WallboxAdapter
-effective --> VictronGateway.applySetpoints (soft/no-op MVP for Multi)
-all mutations of interest --> AuditEvent[]
-```
+| Field | Type | Notes |
+|-------|------|-------|
+| heatPumpKw | number | |
+| heatPump | HeatPumpCommand | on/off + levels |
+| wallboxKw | number | EV limit |
+| batteryGridChargeKw | number | MultiPlus basic charger |
+| maxFeedInKw | number | §9 export cap |
 
-## Validation rules
+## PlantState
 
-- `enduser` MUST NOT create/update GridSignal.
-- `effective` grid-side steuVE ≤ ceiling.
-- Wallbox amps 0 or ≥ minCurrentA and ≤ maxCurrentA.
+Adds `pvRatedKw`, optional `heatPump`, `feedInKw` to prior MPPT/wallbox/battery/grid fields.
+
+## Validation
+
+- enduser MUST NOT write GridConstraint or FeedInConstraint
+- grid-side steuVE ≤ §14a ceiling
+- HP level encoding via adapter (default SG-Ready 2-bit)

@@ -6,9 +6,9 @@ Ein EMS steuert Energieflüsse in der Kundenanlage so, dass:
 
 1. **Eigenverbrauch maximiert** wird (PV → Verbraucher / Speicher, statt Netzbezug).
 2. **Netzbezug und Einspeisung** begrenzt oder zeitlich verschoben werden (Tarife, Peak-Shaving).
-3. **Steuerbare Verbrauchseinrichtungen (SteuVE)** nach §14a EnWG netzdienlich dimmbar sind (Wallbox, Wärmepumpe, Speicher-Laden aus dem Netz, ggf. Klimaanlage).
-4. **Einspeisemanagement** nach §9 EEG (bei PV) umgesetzt werden kann.
-5. **Transparenz** entsteht: Live-Leistungen, Historie, Alarme, Audit-Trail für Steuerbefehle.
+3. **Steuerbare Verbrauchseinrichtungen (SteuVE)** nach **§14a EnWG** netzdienlich dimmbar sind: **EV-Charger-Limit**, **MultiPlus-Grundladefunktion** (Netzladung), **Wärmepumpe Ein/Aus und Stufen**.
+4. **Einspeisemanagement** nach **§9 EEG** (Feed-in-Cap / Abregelung) umgesetzt und für Endkunden nicht manipulierbar ist.
+5. **Transparenz** entsteht: Live-Leistungen, Historie, Alarme, Audit-Trail für Steuerbefehle beider Rechtskreise.
 
 Victron bildet die energetische Basis (ESS: MultiPlus/Quattro, GX/Cerbo, MPPT, Batterie, optional ET112/EM24 Grid-Meter). Das EMS sitzt **logisch darüber**: es liest Messwerte, bewertet Regeln (Tarif, SoC, Netzsignal) und schreibt Sollwerte zurück (Ladeleistung, AC-In-Limit, Relais, Wallbox-Strom).
 

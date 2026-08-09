@@ -1,68 +1,66 @@
-# API Contract: EMS HTTP (MVP)
+# API Contract: EMS HTTP (MVP) — §14a + §9
 
-Base URL: `http://<ems-host>:8787`
+Base URL: `http://<ems-host>:8787`  
+Auth stub: `X-Role: enduser | installer | system`
 
-Auth (MVP stub): header `X-Role: enduser | installer | system`  
-(Production MUST replace with real authentication; contract roles remain.)
-
-## GET /health
-
-- **Roles**: any
-- **200**: `{ "ok": true }`
+## GET /health → `{ "ok": true }`
 
 ## GET /status
 
-- **Roles**: `status:read` (enduser, installer, system)
-- **200**:
 ```json
 {
   "grid": {
     "source": "aux",
     "mode": "limited",
     "maxSteuveGridKw": 4.2,
-    "receivedAt": "2026-08-08T22:00:00.000Z",
     "ceilingKw": 4.2,
-    "writableByEnduser": false
+    "writableByEnduser": false,
+    "law": "EnWG §14a"
   },
-  "wish": { "wallboxKw": 7 },
-  "lastSetpoints": { "heatPumpKw": 0, "wallboxKw": 4.2, "batteryGridChargeKw": 0 }
+  "feedIn": {
+    "source": "rundsteuerung",
+    "mode": "curtailed",
+    "maxFeedInPercent": 0.6,
+    "maxFeedInKw": 6,
+    "writableByEnduser": false,
+    "law": "EEG §9"
+  },
+  "wish": {
+    "wallboxKw": 7,
+    "heatPump": { "preferOn": true, "preferredLevel": 2 }
+  },
+  "lastSetpoints": {
+    "heatPumpKw": 2,
+    "heatPump": { "mode": "level", "level": 2, "powerKw": 2 },
+    "wallboxKw": 2.2,
+    "batteryGridChargeKw": 0,
+    "maxFeedInKw": 6
+  }
 }
 ```
 
 ## PUT /comfort
 
-- **Roles**: `comfort:write` (enduser, installer)
-- **Body**: UserComfortWish partial JSON
-- **200**: `{ "ok": true, "wish": { ... } }`
+Body: `UserComfortWish` (wallboxKw, heatPump.preferOn/preferredLevel, priorities)
 
-## POST /grid/signal
+## POST /grid/signal (§14a)
 
-- **Roles**: `grid:write` (installer with `manual_installer` source, or system)
-- **Body**:
+Roles: `grid:write` only. Enduser → **403**.
+
+## POST /feedin/signal (§9)
+
+Roles: `grid:write` only. Enduser → **403**.
+
+Body example:
+
 ```json
 {
-  "source": "aux",
-  "mode": "limited",
-  "maxSteuveGridKw": 4.2
+  "source": "rundsteuerung",
+  "mode": "curtailed",
+  "maxFeedInPercent": 0.6
 }
 ```
-- **200**: `{ "ok": true, "ceilingKw": 4.2 }`
-- **403**: enduser or forbidden source/role combo; body includes `error` and optional `audit`
 
 ## POST /control/tick
 
-- **Roles**: `status:read` (triggers system-side apply internally)
-- **200**:
-```json
-{
-  "ceilingKw": 4.2,
-  "effective": { "heatPumpKw": 0, "wallboxKw": 4.2, "batteryGridChargeKw": 0 },
-  "deniedBypass": false
-}
-```
-
-## Error shape
-
-```json
-{ "error": "forbidden" | "forbidden_grid_write" | "not_found" | "internal", "message": "..." }
-```
+Returns `ceilingKw`, `maxFeedInKw`, `effective` (incl. `heatPump`, `wallboxKw`, `batteryGridChargeKw`).

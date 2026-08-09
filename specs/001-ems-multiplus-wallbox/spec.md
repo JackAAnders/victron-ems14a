@@ -1,146 +1,127 @@
-# Feature Specification: Victron EMS MultiPlus + MPPT + Wallbox (§14a)
+# Feature Specification: Victron EMS — §14a + EEG §9 (MultiPlus, EV, Heat Pump)
 
 **Feature Branch**: `001-ems-multiplus-wallbox`
 
 **Created**: 2026-08-08
 
+**Updated**: 2026-08-09
+
 **Status**: Draft
 
-**Input**: User description: "Energy management system for Victron MultiPlus with MPPT controllers and wallbox, including non-modifiable §14a grid control for end users, PV surplus charging, RBAC, and Cerbo MQTT integration."
+**Input**: Extend EMS for EnWG §14a and EEG §9. For §14a support basic MultiPlus charger limiting, EV-charger limiting, and heat-pump signalling with simple on/off as well as dedicated levels.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - See live plant and grid constraint (Priority: P1)
+### User Story 1 - See §14a and §9 constraints (Priority: P1)
 
-As an end user or installer, I can see live PV (MPPT aggregate), house load, battery SoC, grid power, wallbox power, and whether a grid constraint (§14a) is active including the allowed ceiling — without being able to change that ceiling.
+As an end user or installer, I can see live plant data plus whether **§14a offtake** and **§9 feed-in** constraints are active (ceiling / max export), without being able to change either.
 
-**Why this priority**: Visibility is the foundation for trust, debugging, and VNB evidence; no actuation risk.
+**Why this priority**: Trust, debugging, VNB/MSB evidence.
 
-**Independent Test**: Run collector/API against Cerbo or fixtures; status shows plant fields and `writableByEnduser: false` for grid.
+**Independent Test**: `/status` shows `grid.law` §14a and `feedIn.law` §9, both `writableByEnduser: false`.
 
 **Acceptance Scenarios**:
 
-1. **Given** Cerbo MQTT is reachable, **When** the collector/API reads state, **Then** aggregated MPPT power and battery SoC are shown within expected tolerance of Venus UI.
-2. **Given** AUX/limited input is active, **When** status is read, **Then** grid mode is `limited` (or equivalent) and ceiling equals the configured limit (e.g. 4.2 kW).
-3. **Given** role `enduser`, **When** a grid-limit write is attempted, **Then** the system rejects it and records a tamper/forbidden audit event.
+1. **Given** Cerbo or demo gateway, **When** status is read, **Then** PV/SoC/wallbox and both constraint blocks are present.
+2. **Given** role `enduser`, **When** `POST /grid/signal` or `POST /feedin/signal`, **Then** 403 + audit.
 
 ---
 
-### User Story 2 - Charge EV from PV surplus (Priority: P1)
+### User Story 2 - §14a: limit EV charger (Priority: P1)
 
-As an end user, when there is PV surplus (MPPT production above house load excluding wallbox), the EMS raises wallbox charge power toward that surplus (respecting EVSE min current), and lowers/stops it when surplus disappears, with hysteresis to avoid flapping.
+As the grid operator path asserts a §14a limit, the EMS reduces EV charge power so netzwirksamer wallbox grid draw respects the ceiling; PV surplus may still charge the EV.
 
-**Why this priority**: Core economic/comfort value of the MultiPlus+MPPT+Wallbox plant.
-
-**Independent Test**: Fixture or demo plant with PV=5 kW, house=0.5 kW, no §14a limit → wallbox setpoint approaches surplus; drop PV → setpoint falls to 0 after hysteresis rules.
-
-**Acceptance Scenarios**:
-
-1. **Given** surplus ≥ EVSE minimum power, **When** a control tick runs, **Then** wallbox target uses surplus (not forced from battery/grid beyond comfort rules).
-2. **Given** surplus below hysteresis / below min current, **When** a control tick runs, **Then** wallbox target is 0 (no flap at 1–5 A).
-3. **Given** wallbox adapter connected, **When** effective setpoint is computed, **Then** adapter receives the guarded kW/A command.
+**Independent Test**: limit 4.2 kW, 0 surplus, wish 11 kW → effective wallbox ≤ 4.2 kW.
 
 ---
 
-### User Story 3 - Obey §14a ceiling without end-user bypass (Priority: P1)
+### User Story 3 - §14a: MultiPlus basic charger function (Priority: P1)
 
-As the grid operator (via Steuerbox/AUX), when a limit or off signal is active, the EMS ensures netzwirksamer SteuVE grid draw (wallbox + battery grid charge, etc.) does not exceed the ceiling; PV surplus may still feed the wallbox. The end user cannot raise or clear the ceiling.
+Under §14a, the EMS limits **MultiPlus grid-side battery charging** (basic charger / AC-in charge limit) as part of the steuVE budget, with lowest priority after heat pump and EV.
 
-**Why this priority**: Compliance / VNB acceptance; NON-NEGOTIABLE per constitution.
-
-**Independent Test**: Simulate limited=4.2 kW with high wallbox wish and zero PV → effective grid-side steuVE ≤ 4.2 kW; enduser POST to grid endpoint → 403.
-
-**Acceptance Scenarios**:
-
-1. **Given** mode `limited` at 4.2 kW and no PV surplus, **When** user wishes 11 kW wallbox, **Then** effective wallbox (grid-side) ≤ 4.2 kW.
-2. **Given** mode `limited` and PV surplus 4.5 kW, **When** allocating, **Then** wallbox may exceed 4.2 kW total by using surplus while grid-side share stays ≤ ceiling.
-3. **Given** mode `off`, **When** allocating, **Then** wallbox grid draw and battery grid charge targets are 0.
-4. **Given** EMS process stopped, **When** AUX is asserted at MultiPlus, **Then** Victron hardware reaction still applies (documented physical path; not EMS-dependent).
+**Independent Test**: tight ceiling with HP+EV demand → `batteryGridChargeKw` cut first; gateway records charger setpoint.
 
 ---
 
-### User Story 4 - Installer commissioning & mapping (Priority: P2)
+### User Story 4 - §14a: heat pump on/off and levels (Priority: P1)
 
-As an installer, I can configure Venus MQTT URL, portal ID, and which digital input instances map to limited/off, then verify a simulated or real Steuerfall.
+The EMS signals a heat pump with:
 
-**Why this priority**: Needed for site bring-up; not required for pure demo mode.
+- simple **on/off**, and
+- **dedicated discrete levels** (SG-Ready-like 0–3 via two relays),
 
-**Independent Test**: `.env` mapping → limited input high → ceiling 4.2 in status; wrong instance → remains normal (documented).
+derived from allocated HP power under the §14a ceiling. End user may prefer a level only within the allowed budget.
 
-**Acceptance Scenarios**:
-
-1. **Given** valid `.env` / config, **When** collector starts, **Then** it connects and prints/returns plant snapshots.
-2. **Given** installer role, **When** bootstrap/manual mapping is needed, **Then** only installer/system may inject grid signals — not enduser.
+**Independent Test**: allocated HP power > 0 → command `level`/`on`; ceiling 0 → `off` relays 00.
 
 ---
 
-### User Story 5 - Audit and acceptance evidence (Priority: P2)
+### User Story 5 - EEG §9 feed-in management (Priority: P1)
 
-As an operator/installer preparing VNB acceptance, I can export or view an audit trail of grid signals, applied setpoints, and denied bypass attempts.
+When a §9 curtailment/zero signal is active, the EMS sets `maxFeedInKw` (from % of rated PV or absolute) and applies it on the Multi/settings path; enduser cannot clear it.
 
-**Why this priority**: Supports Abnahme; secondary to live control.
+**Independent Test**: curtailed 60% of 10 kWp → maxFeedInKw = 6; enduser feed-in write → 403.
 
-**Independent Test**: Trigger forbidden write + limited signal → audit contains both event kinds with timestamps.
+---
 
-**Acceptance Scenarios**:
+### User Story 6 - PV surplus to EV when unconstrained (Priority: P2)
 
-1. **Given** a control tick under limit, **When** setpoints apply, **Then** an audit event records ceiling and effective setpoints.
-2. **Given** enduser bypass attempt, **When** rejected, **Then** audit kind is forbidden/bypass and visible to installer.
+Without binding offtake limit (or within remaining room), EV uses MPPT surplus with hysteresis / min current.
+
+---
+
+### User Story 7 - Installer mapping & audit (Priority: P2)
+
+Installer maps AUX/digital inputs for §14a and §9, verifies Steuerfall, exports audit of grid/feed-in/setpoints/denials.
 
 ---
 
 ### Edge Cases
 
-- MQTT disconnect mid-control: no unbounded retries that spam writes; wallbox left at last guarded value or safe stop policy documented.
-- Multiple MPPTs: aggregate Yield/Power; one offline MPPT does not zero the others.
-- Wallbox reports not connected: do not count phantom load; skip or zero charge commands.
-- SoC at floor: do not grid-charge battery; wallbox surplus charging may continue if PV allows.
-- 3-phase vs 1-phase wallbox: current conversion uses configured phases/volts.
-- Flapping AUX: debounce/sticky behavior documented (minimum: persist last valid signal until timeout policy defined).
+- Simultaneous §14a limit and §9 zero export.
+- HP level request above budget → clamped level/off.
+- MQTT loss: hardware AUX/Rundsteuerung still authoritative.
+- Multiple MPPTs; rated PV missing → fall back carefully for % curtailment.
+- EV below min current → off rather than flap.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: System MUST read plant telemetry from Victron Venus/Cerbo (at least PV/MPPT, battery SoC, grid, consumption, wallbox if present).
-- **FR-002**: System MUST map configured AUX/digital inputs to a grid constraint (normal / limited / off) with a numeric ceiling in kW.
-- **FR-003**: System MUST refuse grid-constraint modifications by role `enduser`.
-- **FR-004**: System MUST clamp all steuVE setpoints so netzwirksamer grid draw ≤ ceiling (PV surplus may supply flexible loads above ceiling).
-- **FR-005**: System MUST compute PV surplus as max(0, PV − house load excluding wallbox) with hysteresis and EVSE minimum current behavior.
-- **FR-006**: System MUST apply wallbox setpoints through an adapter interface (Victron EVCS and test double).
-- **FR-007**: System MUST expose a status API/view including ceiling and `writableByEnduser: false` for grid.
-- **FR-008**: System MUST allow enduser comfort wishes (e.g. desired wallbox kW / priority) only under the guard.
-- **FR-009**: System MUST emit audit events for grid signals, applied setpoints, and forbidden writes.
-- **FR-010**: System MUST support an offline/demo mode (in-memory gateway) for tests without Cerbo.
-- **FR-011**: MultiPlus ESS remains responsible for core battery/grid balance in MVP; EMS MUST NOT require ESS Mode 2/3 for the first accepted delivery.
-- **FR-012**: Documentation MUST describe physical AUX wiring independence from EMS for VNB checklist.
+- **FR-001**: System MUST implement EnWG §14a `GridConstraint` (normal/limited/off + ceiling kW), immutable for enduser.
+- **FR-002**: System MUST implement EEG §9 `FeedInConstraint` (normal/curtailed/zero + % or kW), immutable for enduser.
+- **FR-003**: System MUST limit EV charger power under §14a via WallboxAdapter.
+- **FR-004**: System MUST limit MultiPlus basic grid charging under §14a (`batteryGridChargeKw` / AC-in current limit).
+- **FR-005**: System MUST signal heat pump on/off and discrete levels (adapter: relays / SG-Ready encoding).
+- **FR-006**: System MUST allocate under §14a with priority heat pump → EV → MultiPlus charger.
+- **FR-007**: System MUST allow PV surplus to supply EV/HP above §14a grid ceiling where applicable.
+- **FR-008**: System MUST propagate §9 max feed-in into setpoints and Multi/settings write path when enabled.
+- **FR-009**: System MUST expose status for both laws and reject enduser writes (403).
+- **FR-010**: System MUST audit grid_signal, feedin_signal, setpoints_applied, bypass/forbidden.
+- **FR-011**: Demo/in-memory mode MUST cover §14a + §9 + HP without Cerbo.
+- **FR-012**: Docs MUST describe physical independence of AUX / Rundsteuerung from EMS.
 
 ### Key Entities
 
-- **PlantState**: Snapshot of PV/MPPTs, house load, battery, grid, wallbox.
-- **GridSignal / GridConstraint**: Authoritative ceiling and mode from VNB path.
-- **UserComfortWish**: End-user preferences under ceiling.
-- **PowerSetpoints**: heatPump (optional), wallbox, batteryGridCharge.
-- **AuditEvent**: Tamper-evident operational log record.
-- **WallboxAdapter**: Port to set charge power/current.
-- **VictronGateway**: Port to Cerbo MQTT or in-memory fake.
+- GridSignal / GridConstraint (§14a)
+- FeedInSignal / FeedInConstraint (§9)
+- HeatPumpCommand (off|on|level)
+- PowerSetpoints (HP, EV, MultiPlus charger, maxFeedInKw)
+- PlantState, UserComfortWish, AuditEvent, adapters
 
 ## Success Criteria *(mandatory)*
 
-### Measurable Outcomes
-
-- **SC-001**: With fixtures, 100% of automated invariant tests for FR-003/FR-004 pass in CI (`npm test`).
-- **SC-002**: Demo control tick with PV surplus produces wallbox setpoint ≥ surplus − hysteresis band when unconstrained.
-- **SC-003**: Under 4.2 kW limit and 0 surplus, effective grid-side steuVE power ≤ 4.2 kW on every tick.
-- **SC-004**: Enduser grid write attempts return HTTP 403 (or equivalent) in API tests.
-- **SC-005**: Installer can obtain a status snapshot from Cerbo within one collector interval after connect (when URL configured).
-- **SC-006**: VNB checklist has a completed software evidence section (audit + non-modifiable UI/API) for a simulated Steuerfall.
+- **SC-001**: Invariant tests for FR-001–FR-005 pass in `npm test`.
+- **SC-002**: Under 4.2 kW §14a and 0 surplus, sum of grid-side steuVE setpoints ≤ 4.2 kW.
+- **SC-003**: §9 60% of 10 kW rated → maxFeedInKw = 6 in tick/status.
+- **SC-004**: Enduser grid and feed-in writes → HTTP 403.
+- **SC-005**: HP off when budget 0; level encoding 00/10/01/11 testable.
+- **SC-006**: MultiPlus charger setpoint present in effective setpoints under §14a.
 
 ## Assumptions
 
-- Reference plant is German grid context with §14a-style 2-bit/AUX today; EEBus may come later via the same GridConstraint port.
-- Cerbo local MQTT is available on LAN; portal ID discoverable from notify topics if not preconfigured.
-- Wallbox is Victron EVCS or any adapter implementing the same interface; Drittanbieter adapters are follow-on.
-- Heat pump is out of scope for MVP allocation (max 0) but data model may keep the field.
-- Physical AUX commissioning is performed by Elektrofachkraft; software assumes mapped digital inputs.
-- Existing monorepo packages (`domain`, `safety`, `rules`, `rbac`, `victron-mqtt`, `wallbox`, apps) are the implementation baseline.
+- German VNB/MSB context; 2-bit/AUX and Rundsteuerung/digital inputs today; EEBus later on same ports.
+- Heat pump uses two potential-free contacts or Cerbo relays (SG-Ready-like).
+- Victron EVCS or WallboxAdapter; MultiPlus ESS Mode 1 for MVP.
+- Percent curtailment needs configured `pvRatedKw`.
+- Not legal advice; operator docs / VNB rules prevail.

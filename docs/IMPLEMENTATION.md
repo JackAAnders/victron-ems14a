@@ -57,9 +57,13 @@ I5  Bypass-Versuch erzeugt TamperAudit-Event
 
 ## Anlagenfokus
 
-Primäre Hardware-Zielkonfiguration: **MultiPlus + MPPT + Wallbox** – siehe [`ANLAGE-MULTIPLUS-MPPT-WALLBOX.md`](./ANLAGE-MULTIPLUS-MPPT-WALLBOX.md).
+Primäre Hardware-Zielkonfiguration: **MultiPlus + MPPT + Wallbox + Wärmepumpe** – siehe [`ANLAGE-MULTIPLUS-MPPT-WALLBOX.md`](./ANLAGE-MULTIPLUS-MPPT-WALLBOX.md).
 
-Kurz: MPPT nur lesen/aggregieren; Multi liefert ESS + AUX-§14a; EMS schreibt vor allem die **Wallbox**, Ceiling gilt für netzwirksamen SteuVE-Bezug.
+Kurz:
+
+- **§14a**: EV-Limit, MultiPlus-Netzladung (basic charger), WP Ein/Aus + Stufen  
+- **§9**: Feed-in-Cap (`maxFeedInKw` / % von `pvRatedKw`)  
+- MPPT nur lesen; beide Rechtskreise für Endkunden immutable
 
 ## Umsetzungsreihenfolge
 

@@ -1,28 +1,35 @@
 import mqtt, { type MqttClient } from "mqtt";
-import type { GridSignal, PlantState, PowerSetpoints } from "@victron-ems14a/domain";
+import type {
+  FeedInSignal,
+  GridSignal,
+  PlantState,
+  PowerSetpoints,
+} from "@victron-ems14a/domain";
 import { gridSignalFromAux, type AuxMapConfig } from "./auxMap.js";
 import { VenusValueCache } from "./cache.js";
+import { feedInSignalFromInputs, type FeedInMapConfig } from "./feedInMap.js";
 import type { VictronGateway } from "./gateway.js";
 import { plantStateFromCache } from "./plantFromCache.js";
 import { keepaliveTopic, writeTopic } from "./topics.js";
 
 export interface VenusMqttGatewayOptions {
-  url: string; // e.g. mqtt://192.168.1.50:1883
+  url: string;
   portalId?: string;
   username?: string;
   password?: string;
   aux?: AuxMapConfig;
-  /** Keepalive interval ms (Venus requires periodic R/.../keepalive). */
+  feedIn?: FeedInMapConfig;
   keepaliveMs?: number;
-  /** Optional: apply battery grid-charge hint via MQTT path (advanced). */
+  /** Apply MultiPlus charger limit + feed-in related writes. */
   enableMultiWrites?: boolean;
   vebusInstance?: string;
+  /**
+   * Settings path for max grid feed-in (site/firmware specific).
+   * Published as watts when finite.
+   */
+  maxFeedInSettingsPath?: string;
 }
 
-/**
- * Live Cerbo / Venus OS gateway over local MQTT.
- * Read-heavy; wallbox writes go through WallboxAdapter (may share client).
- */
 export class VenusMqttGateway implements VictronGateway {
   readonly cache = new VenusValueCache();
   private client: MqttClient | null = null;
@@ -93,18 +100,36 @@ export class VenusMqttGateway implements VictronGateway {
     return gridSignalFromAux(this.cache, this.opts.aux ?? {});
   }
 
+  async readFeedInSignal(): Promise<FeedInSignal | null> {
+    return feedInSignalFromInputs(this.cache, this.opts.feedIn ?? {});
+  }
+
   async applySetpoints(setpoints: PowerSetpoints): Promise<void> {
-    this.lastSetpoints = { ...setpoints };
-    // Multi writes are opt-in; default MVP only records setpoints.
-    // Wallbox power is applied by WallboxAdapter in the controller.
+    this.lastSetpoints = {
+      ...setpoints,
+      heatPump: { ...setpoints.heatPump },
+    };
     if (!this.opts.enableMultiWrites || !this.client) return;
-    const portal = this.opts.portalId ?? this.cache.getPortalId();
-    if (!portal) return;
-    const instance = this.opts.vebusInstance ?? this.cache.listInstances("vebus")[0];
-    if (!instance) return;
-    // Soft hint: publish nothing destructive by default.
-    void setpoints;
-    void writeTopic;
+
+    const instance =
+      this.opts.vebusInstance ?? this.cache.listInstances("vebus")[0];
+    if (instance) {
+      // Basic charger function: limit MultiPlus AC-in charge current (A).
+      // Approx: kW / (230 * phases). Default 1P.
+      const amps =
+        setpoints.batteryGridChargeKw <= 0
+          ? 0
+          : Math.max(1, Math.ceil((setpoints.batteryGridChargeKw * 1000) / 230));
+      this.publishWrite("vebus", instance, "Ac/In/1/CurrentLimit", amps);
+    }
+
+    if (Number.isFinite(setpoints.maxFeedInKw)) {
+      const path =
+        this.opts.maxFeedInSettingsPath ??
+        "Settings/CGwacs/MaxFeedInPower";
+      // settings service often uses instance 0
+      this.publishWrite("settings", "0", path, Math.round(setpoints.maxFeedInKw * 1000));
+    }
   }
 
   publishWrite(

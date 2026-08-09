@@ -214,7 +214,27 @@ Erweiterung der bestehenden Pakete:
 6. EMS Wallbox-Schreiben mit Guard (erst ohne, dann mit §14a-Simulation)  
 7. Dokumentation / VNB-Checkliste abhaken  
 
-## 10. Offene Planungsfragen (pro Objekt)
+## 10. EnWG §14a Aktoren (diese Anlage)
+
+| Aktor | EMS-Sollwert | Typische Umsetzung |
+|-------|--------------|--------------------|
+| EV-Charger | `wallboxKw` / Ampere | Victron EVCS MQTT oder Drittanbieter-Adapter |
+| MultiPlus basic charger | `batteryGridChargeKw` → AC-In CurrentLimit | Netzladung Batterie drosseln/sperren |
+| Wärmepumpe | `heatPump` off/on/level 0–3 | 2 Relais (SG-Ready-ähnlich: 00/10/01/11) |
+
+Priorität unter Ceiling: **WP → EV → MultiPlus-Netzladung**.
+
+## 11. EEG §9 Einspeisemanagement
+
+| Signal | EMS | Wirkung |
+|--------|-----|---------|
+| normal | unbegrenzt (bzw. Anlagendefault) | keine EMS-Drosselung |
+| curtailed | `maxFeedInPercent` × `pvRatedKw` oder absolut | Export-Cap an Venus/Multi |
+| zero | `maxFeedInKw = 0` | Einspeisung sperren |
+
+Endkunde darf §9-Parameter nicht freischalten. Physische Rundsteuerung/Steuerbox bleibt führend, wenn EMS offline ist.
+
+## 12. Offene Planungsfragen (pro Objekt)
 
 - 1- oder 3-phasiger Multi / Wallbox?  
 - Welche Wallbox (Victron EVCS vs. Drittanbieter)?  

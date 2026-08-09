@@ -1,6 +1,6 @@
 # victron-ems14a
 
-Energiemanagementsystem für Victron **MultiPlus + MPPT + Wallbox** mit manipulationssicherer §14a-Steuerung.
+Energiemanagementsystem für Victron **MultiPlus + MPPT + Wallbox + Wärmepumpe** mit manipulationssicherer Steuerung nach **EnWG §14a** und **EEG §9**.
 
 ## Spec Kit (GitHub Spec-Driven Development)
 
@@ -28,9 +28,10 @@ export SPECIFY_FEATURE_DIRECTORY=specs/001-ems-multiplus-wallbox
 
 ## Prinzip
 
-- **GridControl** (VNB/AUX): für Endkunden gesperrt
-- **UserComfort**: Wünsche nur unter `gridCeiling`
-- MPPT nur lesen; EMS steuert vor allem die **Wallbox**
+- **§14a GridControl** (Offtake-Ceiling): Endkunde gesperrt → limitiert EV, MultiPlus-Netzladung, WP
+- **§9 FeedInControl** (Einspeise-Cap): Endkunde gesperrt → `maxFeedInKw`
+- **Wärmepumpe**: Ein/Aus + Stufen (SG-Ready-ähnlich, 2 Relais)
+- MPPT nur lesen; Komfortwünsche nur unter den aktiven Limits
 
 ## Schnellstart
 

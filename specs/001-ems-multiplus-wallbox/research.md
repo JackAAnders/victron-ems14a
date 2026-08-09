@@ -1,39 +1,28 @@
-# Research: 001-ems-multiplus-wallbox
+# Research: 001-ems-multiplus-wallbox (§14a + §9)
 
 ## Decisions
 
-### D1 — EMS as policy layer (not ESS Mode 3 by default)
+### D1 — Two constraint objects
 
-- **Decision**: MVP keeps Victron ESS Mode 1 (Optimized); EMS primarily controls wallbox and reads Multi/MPPT/grid; AUX enforces §14a in hardware.
-- **Alternatives**: ESS Mode 2/3 with AcPowerSetpoint for full external control.
-- **Rationale**: Lower risk, matches constitution II; Mode 2/3 needs stronger watchdogs later.
+- **Decision**: Separate `GridConstraint` (EnWG §14a offtake) and `FeedInConstraint` (EEG §9 export).
+- **Rationale**: Different legal actuators and semantics; both enduser-immutable.
 
-### D2 — Venus local MQTT as primary integration
+### D2 — §14a actuator set
 
-- **Decision**: Use Cerbo local MQTT (`mqtt` npm) with notify cache + keepalive `R/<portal>/keepalive`.
-- **Alternatives**: Modbus-TCP only; VRM cloud API; dbus on-device scripts.
-- **Rationale**: Rich topic coverage for solarcharger/evcharger/system; LAN local-first.
+- **Decision**: EV charge limit + MultiPlus basic charger (AC-in current) + HP on/off and discrete levels.
+- **Rationale**: Matches user requirement; charger last in priority so comfort loads win under ceiling.
 
-### D3 — Two-level control: GridConstraint vs UserComfort
+### D3 — Heat pump levels as SG-Ready-like 2-bit
 
-- **Decision**: Enforce VNB ceiling in `GridConstraint`/`ActuatorGuard`; enduser only writes comfort under RBAC.
-- **Alternatives**: Single config blob editable in UI.
-- **Rationale**: Constitution I / VNB non-modifiability.
+- **Decision**: Levels 0–3 → relay pairs 00/10/01/11 via `encodeSgReadyRelays`.
+- **Alternatives**: Modbus OEM APIs; single contactor only.
+- **Rationale**: Common WP interface; simple on/off is level 0 vs ≥1.
 
-### D4 — PV surplus for wallbox with hysteresis + min 6 A
+### D4 — §9 as maxFeedInKw into settings/Multi path
 
-- **Decision**: `computePvSurplusKw` + `kwToAmps` stop below EVSE minimum.
-- **Alternatives**: Continuous sub-6A setpoints; frequency-based AC coupling tricks.
-- **Rationale**: Avoid charger flap; matches common EVSE behavior.
+- **Decision**: Resolve % of `pvRatedKw` or absolute kW; publish when `enableMultiWrites`.
+- **Rationale**: Aligns with Venus feed-in limitation patterns; exact path configurable.
 
-### D5 — In-memory gateway for CI
+### D5 — ESS Mode 1 remains default
 
-- **Decision**: `InMemoryVictronGateway` + `InMemoryWallboxAdapter` for deterministic tests.
-- **Alternatives**: Require live Cerbo in CI.
-- **Rationale**: Offline CI; constitution III.
-
-## Open points (site-specific)
-
-- Exact `digitalinput` instance numbers for AUX mirrors on a given Cerbo/Multi firmware.
-- Victron EVCS MQTT write path name (`SetCurrent`) verification on target firmware.
-- 1P vs 3P wallbox electrical config in `.env` / config file.
+- Unchanged; avoid Mode 2/3 until fail-safes mature.

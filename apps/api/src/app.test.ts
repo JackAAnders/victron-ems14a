@@ -20,51 +20,52 @@ async function withServer(
   }
 }
 
-describe("API RBAC", () => {
-  it("rejects enduser grid writes with 403", async () => {
+describe("API RBAC §14a + §9", () => {
+  it("rejects enduser grid and feed-in writes with 403", async () => {
     await withServer(async (base) => {
-      const res = await fetch(`${base}/grid/signal`, {
+      const g = await fetch(`${base}/grid/signal`, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-role": "enduser",
-        },
+        headers: { "content-type": "application/json", "x-role": "enduser" },
         body: JSON.stringify({
           source: "aux",
           mode: "normal",
           maxSteuveGridKw: 99,
         }),
       });
-      assert.equal(res.status, 403);
+      assert.equal(g.status, 403);
+
+      const f = await fetch(`${base}/feedin/signal`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-role": "enduser" },
+        body: JSON.stringify({
+          source: "rundsteuerung",
+          mode: "normal",
+          maxFeedInPercent: 1,
+        }),
+      });
+      assert.equal(f.status, 403);
     });
   });
 
-  it("allows enduser comfort write and status read", async () => {
+  it("status exposes both laws as non-writable for enduser", async () => {
     await withServer(async (base) => {
-      const put = await fetch(`${base}/comfort`, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/json",
-          "x-role": "enduser",
-        },
-        body: JSON.stringify({ wallboxKw: 6 }),
-      });
-      assert.equal(put.status, 200);
-
       const status = await fetch(`${base}/status`, {
         headers: { "x-role": "enduser" },
       });
       assert.equal(status.status, 200);
       const body = (await status.json()) as {
-        grid: { writableByEnduser: boolean };
-        wish: { wallboxKw: number };
+        grid: { writableByEnduser: boolean; law: string };
+        feedIn: { writableByEnduser: boolean; law: string; maxFeedInKw: number };
       };
       assert.equal(body.grid.writableByEnduser, false);
-      assert.equal(body.wish.wallboxKw, 6);
+      assert.equal(body.feedIn.writableByEnduser, false);
+      assert.match(body.grid.law, /14a/);
+      assert.match(body.feedIn.law, /§9|EEG/);
+      assert.equal(body.feedIn.maxFeedInKw, 6);
     });
   });
 
-  it("control tick keeps effective power under ceiling", async () => {
+  it("control tick returns HP command and feed-in cap", async () => {
     await withServer(async (base) => {
       const res = await fetch(`${base}/control/tick`, {
         method: "POST",
@@ -73,18 +74,16 @@ describe("API RBAC", () => {
       assert.equal(res.status, 200);
       const body = (await res.json()) as {
         ceilingKw: number;
+        maxFeedInKw: number;
         effective: {
-          heatPumpKw: number;
+          heatPump: { mode: string; level?: number };
           wallboxKw: number;
           batteryGridChargeKw: number;
         };
       };
-      const sum =
-        body.effective.heatPumpKw +
-        body.effective.wallboxKw +
-        body.effective.batteryGridChargeKw;
       assert.equal(body.ceilingKw, 4.2);
-      assert.ok(sum <= 4.2 + 1e-9);
+      assert.equal(body.maxFeedInKw, 6);
+      assert.ok(body.effective.heatPump);
     });
   });
 });

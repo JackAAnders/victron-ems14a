@@ -2,32 +2,21 @@
 
 ## Spec quality
 
-- [x] User stories prioritized (P1/P2) and independently testable
-- [x] Acceptance scenarios in Given/When/Then form
-- [x] Edge cases listed
-- [x] Functional requirements numbered (FR-001+)
-- [x] Success criteria measurable and tech-agnostic where required
-- [x] Assumptions explicit (ESS Mode 1, German §14a AUX, Victron EVCS)
+- [x] §14a and EEG §9 both specified
+- [x] User stories for EV limit, MultiPlus charger, HP on/off+levels
+- [x] Acceptance criteria / FRs / success metrics
+- [x] Enduser non-modifiability for both laws
 
 ## Constitution alignment
 
-- [x] Enduser cannot modify GridControl (I)
-- [x] EMS is policy layer over Victron ESS (II)
-- [x] Invariants covered by tests (III)
-- [x] Local-first MQTT / least privilege (IV)
-- [x] Reference plant MultiPlus+MPPT+Wallbox (V)
+- [x] Dual immutable paths (I)
+- [x] Policy layer (II)
+- [x] Tests for feed-in + HP + charger (III)
+- [x] Local-first (IV)
+- [x] Plant scope includes HP (V)
 
-## Plan / design
+## Gaps
 
-- [x] Technical context filled (no NEEDS CLARIFICATION left for MVP)
-- [x] Constitution Check table completed
-- [x] data-model.md matches domain package
-- [x] API contract documents 403 for grid writes
-- [x] quickstart runnable
-
-## Gaps to close in tasks
-
-- [ ] Replace `X-Role` stub with real auth before production exposure
-- [ ] Persist audit beyond process memory
-- [ ] Live fixture capture from a real Cerbo
-- [ ] Debounce policy for flapping AUX formalized in code
+- [ ] Live Venus topic verification (CurrentLimit / MaxFeedInPower)
+- [ ] Site-specific WP relay wiring sheet
+- [ ] Durable audit + real auth
