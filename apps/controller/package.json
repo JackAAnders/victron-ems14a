@@ -1,0 +1,29 @@
+{
+  "name": "@victron-ems14a/controller",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "start": "node --import tsx src/run.ts"
+  },
+  "dependencies": {
+    "@victron-ems14a/domain": "0.1.0",
+    "@victron-ems14a/heatpump": "0.1.0",
+    "@victron-ems14a/rules": "0.1.0",
+    "@victron-ems14a/safety": "0.1.0",
+    "@victron-ems14a/victron-mqtt": "0.1.0",
+    "@victron-ems14a/wallbox": "0.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
