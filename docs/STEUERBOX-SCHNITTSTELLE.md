@@ -108,6 +108,8 @@ Steuerbox/Gateway --EEBus/IP--> EMS auf Venus
 
 Im Code ist das derselbe Port (`GridControlPort` / Signal-Objekte); nur die Quelle wechselt von AUX-Bits auf digitale Payloads. Endkunde bleibt ohne Schreibrecht.
 
+**Anleitung Cerbo + EEBus (Kabel, Switch, EMS als Peer):** siehe [`EEBUS-CERBO.md`](./EEBUS-CERBO.md).
+
 ## 5. Betrieb „EMS auf Venus“
 
 | Thema | Empfehlung |

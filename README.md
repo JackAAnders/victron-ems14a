@@ -23,6 +23,7 @@ export SPECIFY_FEATURE_DIRECTORY=specs/001-ems-multiplus-wallbox
 
 - **[PLAN.md](./PLAN.md)** – Anforderungen, Rechtslage, Physik, Endanwenderschutz
 - **[docs/STEUERBOX-SCHNITTSTELLE.md](./docs/STEUERBOX-SCHNITTSTELLE.md)** – Steuerbox ↔ Venus/EMS (AUX, §14a/§9, später EEBus)
+- **[docs/EEBUS-CERBO.md](./docs/EEBUS-CERBO.md)** – EEBus physisch/logisch an Cerbo anbinden
 - **[docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md](./docs/ANLAGE-MULTIPLUS-MPPT-WALLBOX.md)** – Anlagenplan
 - **[docs/IMPLEMENTATION.md](./docs/IMPLEMENTATION.md)** – technische Umsetzung / Sprints
 - **[docs/vnb-checkliste.md](./docs/vnb-checkliste.md)** – VNB-/Abnahme-Checkliste
